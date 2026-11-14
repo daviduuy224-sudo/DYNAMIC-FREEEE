@@ -41,3 +41,11 @@ jobs:
           name: DynamicAssist-Windows
           path: build/dynamicassist.practice.geode
           if-no-files-found: error
+      - name: Recover verified package
+        shell: pwsh
+        run: |
+          $package = 'build/dynamicassist.practice.geode'
+          Get-FileHash $package -Algorithm SHA256 | Format-List
+          Write-Output 'DYNAMIC_PACKAGE_BEGIN'
+          Write-Output ([Convert]::ToBase64String([IO.File]::ReadAllBytes($package)))
+          Write-Output 'DYNAMIC_PACKAGE_END'

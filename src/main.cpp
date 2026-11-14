@@ -14,6 +14,7 @@
 #include <string>
 #include "controls.hpp"
 #include "collision_policy.hpp"
+#include "portal_policy.hpp"
 #include "timing.hpp"
 #include "input_queue.hpp"
 #include "mode_policy.hpp"
@@ -247,6 +248,8 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
     } simulationGuard;
     state.simDead = false;
     state.uncertain = false;
+    // Undo candidate-only scale changes before restoring attributes.
+    ghost->togglePlayerScale(player->m_vehicleSize < 1.f, true);
     ghost->copyAttributes(player);
     ghost->setPosition(player->getPosition());
     ghost->setRotation(player->getRotation());
@@ -408,7 +411,21 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
                 }
                 continue;
             }
-            if (category == dynamic::CollisionCategory::geometry) {
+            auto portal = dynamic::portalAction(type);
+            if (portal != dynamic::PortalAction::unsupported) {
+                // Preserve the engine's object order: resolve preceding solids
+                // before changing the candidate's gravity or hitbox size.
+                if (!filtered.empty()) {
+                    GJBaseGameLayer::collisionCheckObjects(player, &filtered,
+                        static_cast<int>(filtered.size()), dt);
+                    filtered.clear();
+                }
+                if (state.simDead || state.uncertain) return;
+                bool overlaps = object->m_objectRadius > 0.f
+                    ? GJBaseGameLayer::playerCircleCollision(player, object)
+                    : object->getObjectRect().intersectsRect(player->getObjectRect());
+                if (overlaps) dynamic::applyPortal(*player, portal);
+            } else if (category == dynamic::CollisionCategory::geometry) {
                 filtered.push_back(object);
             } else if (category == dynamic::CollisionCategory::unsupported &&
                        object->getObjectRect().intersectsRect(player->getObjectRect())) {

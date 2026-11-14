@@ -53,7 +53,13 @@ Coloca `dynamicassist.practice.geode` en la carpeta `Geometry Dash/geode/mods` y
 
 <!-- coderabbit-ai-generated-section:v1:0922db1ff39fcb3ad49b8fe07f3ebc0849fa77ba978ccd273fa5418acce39bc7 -->
 
-- Los objetos que Geometry Dash clasifica como sólidos, peligros o peligros animados se pasan al motor de colisiones según su tipo, sin una lista de IDs. Las pendientes tienen un tratamiento aparte. Los portales, orbes, bloques rompibles y otros objetos aún pueden interrumpir la predicción; la cobertura y precisión de cada objeto no están verificadas en el juego.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:53f00f2a509fa1504a21eca1aa38e31ec4c8429809854321cf5ab71edd2a9086 -->
+
+- Los objetos que Geometry Dash clasifica como sólidos, peligros o peligros animados se pasan al motor de colisiones según su tipo, sin una lista de IDs. Las pendientes tienen un tratamiento aparte. La simulación aplica los portales de gravedad normal/invertida y de tamaño normal/mini al jugador oculto mediante sus funciones nativas sin efectos visuales. Los orbes, portales de vehículo/velocidad, bloques rompibles y otros objetos todavía interrumpen la predicción. La cobertura y precisión de estos cambios requieren una prueba dentro del juego.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 <!-- /coderabbit-ai-generated:v1 -->
 
