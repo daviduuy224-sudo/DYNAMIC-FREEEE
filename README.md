@@ -15,7 +15,14 @@ Coloca `dynamicassist.practice.geode` en la carpeta `Geometry Dash/geode/mods` y
 <!-- coderabbit-ai-generated-section:v1:e6c194d601f543857de41fed979ec786d01c1acdd3e7e0c4810907afb1a8f097 -->
 
 - Empieza desactivado. Los botones **ON/OFF**, **-** y **+** dentro del nivel activan o desactivan la asistencia y ajustan el margen de 0 a 16 ticks. F6 recorre esos valores; F7 alterna entre 0 y el último margen seleccionado (1 si aún no hay uno). También puedes cambiar el margen en los ajustes del mod de Geode.
-- La interfaz muestra los clics corregidos, los ticks realmente retrasados y el último retraso de cada intento. Una entrada pendiente interrumpida se cuenta solo por los ticks que llegaron a transcurrir; las entradas descartadas no se cuentan. **Show in-level controls** permite ocultar los controles.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:b2cdadc253c6f1e31fd363f0b3f342d78bb24a792106722c443d09c85b277bf6 -->
+
+- La interfaz muestra los clics corregidos, los ticks realmente retrasados, el último retraso y el motivo del último resultado. Una entrada pendiente interrumpida se cuenta solo por los ticks que llegaron a transcurrir; las entradas descartadas no se cuentan. **Show in-level controls** permite ocultar los controles.
+- Si aparece `window-zero`, activa la asistencia y aumenta el margen. `time-budget` indica que la simulación agotó el tiempo; puedes aumentar **Prediction time budget**. `unsupported-object`, `ring`, `dual`, `platformer`, `slope` y `force` señalan situaciones que este prototipo no puede predecir con confianza. `no-physics-tick` indica que todavía no hay un tick válido.
+
+<!-- /coderabbit-ai-generated:v1 -->
 <!-- coderabbit-ai-generated:v1 -->
 
 <!-- coderabbit-ai-generated-section:v1:f98c5183c90792e8e75091694fb1bad7e7d268779ad6d207277e2cf7f46c4b47 -->

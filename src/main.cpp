@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <string>
 #include "controls.hpp"
 #include "timing.hpp"
 #include "input_queue.hpp"
@@ -81,6 +82,7 @@ struct State {
     CCMenu* controls = nullptr;
     CCLabelBMFont* status = nullptr;
     dynamic::AttemptStats stats;
+    std::string lastResult = "Esperando clic";
     std::uint64_t completedSteps = 0;
     std::uint64_t pendingStartStep = 0;
     std::uint8_t pendingDelay = 0;
@@ -99,11 +101,16 @@ void updateControls() {
     if (state.controls) state.controls->setVisible(visible);
     if (state.status) {
         state.status->setVisible(visible);
-        auto text = fmt::format("Assist: {} | {} ticks (F6/F7)\nCorrections: {} | delayed: {} ticks | last: {}",
+        auto text = fmt::format("Assist: {} | {} ticks (F6/F7)\nCorrecciones: {} | ticks: {} | ultimo: {}\n{}",
             window ? "ON" : "OFF", window, state.stats.corrected,
-            state.stats.delayedTicks, state.stats.lastDelay);
+            state.stats.delayedTicks, state.stats.lastDelay, state.lastResult);
         state.status->setString(text.c_str());
     }
+}
+void showResult(std::string result) {
+    if (state.lastResult == result) return;
+    state.lastResult = std::move(result);
+    updateControls();
 }
 void inject(PlayLayer* layer, bool down) {
     state.injecting = true;
@@ -113,7 +120,10 @@ void inject(PlayLayer* layer, bool down) {
 }
 void forwardQueued(PlayLayer* layer, dynamic::QueuedInput const& event, char const* reason) {
     state.stats.delivered(state.pendingStartStep, state.completedSteps);
+    auto actualDelay = state.completedSteps >= state.pendingStartStep
+        ? state.completedSteps - state.pendingStartStep : 0;
     inject(layer, event.down);
+    state.lastResult = fmt::format("Entrada aplicada: +{} ticks", actualDelay);
     updateControls();
     if (Mod::get()->getSettingValue<bool>("diagnostics")) {
         log::info("[Dynamic Assist diagnostic] queued input forwarded: reason={} input={} due_tick={} current_tick={}",
@@ -142,6 +152,7 @@ void setWindow(PlayLayer* layer, std::int64_t value) {
     if (previous > 0) state.lastWindow = previous;
     Mod::get()->setSettingValue<int64_t>("window", value);
     if (!state.pending.empty() && dynamic::pendingExceedsWindow(state.pendingDelay, value)) flush(layer);
+    if (previous != value) state.lastResult = "Esperando clic";
     updateControls();
 }
 void resetState(PlayLayer* layer) {
@@ -157,6 +168,7 @@ void resetState(PlayLayer* layer) {
     state.completedSteps = 0;
     state.pendingStartStep = 0;
     state.stats = {};
+    state.lastResult = "Esperando clic";
     discardPending("level-reset");
     updateControls();
 }
@@ -289,13 +301,16 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
         if (!player) {
             if (diagnostics) log::info("[Dynamic Assist diagnostic] input ignored: missing-player");
             flush(layer);
+            showResult("Sin jugador disponible");
             state.deliveredDown = down;
             return GJBaseGameLayer::handleButton(down, buttonId, player1);
         }
         auto context = predictionContext(player, layer, window > 0);
         if (!dynamic::canPredict(context)) {
-            if (diagnostics) log::info("[Dynamic Assist diagnostic] input ignored: {}", blockName(dynamic::blockReason(context)));
+            auto reason = dynamic::blockReason(context);
+            if (diagnostics) log::info("[Dynamic Assist diagnostic] input ignored: {}", blockName(reason));
             flush(layer);
+            showResult(fmt::format("Sin prediccion: {}", blockName(reason)));
             state.deliveredDown = down;
             return GJBaseGameLayer::handleButton(down, buttonId, player1);
         }
@@ -303,6 +318,7 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
         if (!state.ghost) {
             if (diagnostics) log::info("[Dynamic Assist diagnostic] input ignored: ghost-unavailable");
             flush(layer);
+            showResult("Sin prediccion: ghost-unavailable");
             state.deliveredDown = down;
             return GJBaseGameLayer::handleButton(down, buttonId, player1);
         }
@@ -312,6 +328,7 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             flush(layer);
             log::info("Dynamic Assist: ended the planned delay on new input");
             if (diagnostics) log::info("[Dynamic Assist diagnostic] pending delay interrupted by another input");
+            showResult("Entrada interrumpida por nuevo clic");
             state.deliveredDown = down;
             return GJBaseGameLayer::handleButton(down, buttonId, player1);
         }
@@ -326,6 +343,24 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             log::info("[Dynamic Assist diagnostic] input={} mode={} window={} result={} delay={} attempts={} issue={} tick_dt={} elapsed_us={}",
                 down ? "press" : "release", static_cast<int>(context.vehicle), window, decisionName(decision.reason),
                 static_cast<unsigned>(decision.delay), decision.attempts, issueName(state.issue), state.tickDt, elapsed);
+        }
+        switch (decision.reason) {
+            case dynamic::DecisionReason::safeNow:
+                showResult("Sin cambio: trayectoria segura");
+                break;
+            case dynamic::DecisionReason::noSafeTick:
+                showResult("Sin alternativa en el margen");
+                break;
+            case dynamic::DecisionReason::unknownInitial:
+            case dynamic::DecisionReason::unknownCandidate:
+                showResult(fmt::format("Prediccion incompleta: {}", issueName(state.issue)));
+                break;
+            case dynamic::DecisionReason::delayed:
+                showResult(fmt::format("Ajuste previsto: +{} ticks", static_cast<unsigned>(decision.delay)));
+                break;
+            case dynamic::DecisionReason::disabled:
+                showResult("Asistencia desactivada");
+                break;
         }
         if (decision.delay) {
             state.pendingStartStep = state.completedSteps;
@@ -411,7 +446,9 @@ class $modify(DynamicPlayer, PlayerObject) {
                 setWindow(layer, dynamic::toggleWindow(Mod::get()->getSettingValue<int64_t>("window"), state.lastWindow));
             }
             state.f7Down = toggle;
-            if (state.displayedWindow != dynamic::clampWindow(Mod::get()->getSettingValue<int64_t>("window")) ||
+            auto displayedWindow = dynamic::clampWindow(Mod::get()->getSettingValue<int64_t>("window"));
+            if (state.displayedWindow != displayedWindow) state.lastResult = "Esperando clic";
+            if (state.displayedWindow != displayedWindow ||
                 state.displayedControls != Mod::get()->getSettingValue<bool>("show-controls")) updateControls();
             auto window = dynamic::clampWindow(Mod::get()->getSettingValue<int64_t>("window"));
             auto context = predictionContext(this, layer, window > 0);
