@@ -24,7 +24,13 @@ Coloca `dynamicassist.practice.geode` en la carpeta `Geometry Dash/geode/mods` y
 
 <!-- coderabbit-ai-generated-section:v1:e79d96579e974a355d365f16a8354abeb23543a6f24382e9604d68168fdf0b3d -->
 
-- Si aparece `window-zero`, activa la asistencia y aumenta el margen. `time-budget` indica que la simulación agotó el tiempo; puedes aumentar **Prediction time budget**. `Objeto no compatible` muestra el ID y el tipo numérico del objeto que interrumpió la predicción; si activas **Diagnostic log**, estos datos aparecen como `object_id` y `object_type` en el registro. Comparte ambos números y el porcentaje del nivel al informar de un problema. <!-- coderabbit-ai-generated:v1 -->
+- Si aparece `window-zero`, activa la asistencia y aumenta el margen. `time-budget` indica que la simulación agotó el tiempo; puedes aumentar **Prediction time budget**. <!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:099104d1848cfafa9b229b33d35764e8bed8915e39b3dda004e27c932054805e -->
+
+`Interaccion no simulada` muestra el ID y el tipo numérico del objeto que interrumpió la predicción
+
+<!-- /coderabbit-ai-generated:v1 -->; si activas **Diagnostic log**, estos datos aparecen como `object_id` y `object_type` en el registro. Comparte ambos números y el porcentaje del nivel al informar de un problema. <!-- coderabbit-ai-generated:v1 -->
 
 <!-- coderabbit-ai-generated-section:v1:6515b958e9fc606b12e4466db277514215ada4c97c133ddc87737e9a55299cb2 -->
 
@@ -120,7 +126,13 @@ Coloca `dynamicassist.practice.geode` en la carpeta `Geometry Dash/geode/mods` y
 
 <!-- coderabbit-ai-generated-section:v1:775bde7f1f5e696a97a062f5173891f8424ce6e9badf953cfb3b844d5074361f -->
 
-La simulación usa un jugador oculto y una ventana corta. Cada candidato se restaura con un checkpoint nativo; su estado de juego temporal se restaura al terminar, incluso si se agota el presupuesto. El dash ya puede predecirse con una copia de su orbe. Este cambio amplía el comportamiento anterior, que interrumpía la predicción ante orbes, dash y portales de vehículo/velocidad.
+La simulación usa un jugador oculto y una ventana corta. Cada candidato se restaura con un checkpoint nativo; <!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:be99b1b723d72b97ed9465769bf12a6d77ff1efdee25281d68489b3875414c48 -->
+
+su contexto de portales y activaciones temporales se restaura al terminar
+
+<!-- /coderabbit-ai-generated:v1 -->, incluso si se agota el presupuesto. El dash ya puede predecirse con una copia de su orbe. Este cambio amplía el comportamiento anterior, que interrumpía la predicción ante orbes, dash y portales de vehículo/velocidad.
 
 <!-- coderabbit-ai-generated:v1 -->
 
