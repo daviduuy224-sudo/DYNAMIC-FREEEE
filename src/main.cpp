@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include "controls.hpp"
 #include "timing.hpp"
 #include "input_queue.hpp"
 #include "mode_policy.hpp"
@@ -73,12 +74,37 @@ struct State {
     bool injecting = false;
     bool deliveredDown = false;
     bool f6Down = false;
+    bool f7Down = false;
+    std::int64_t lastWindow = 1;
+    std::int64_t displayedWindow = -1;
+    bool displayedControls = false;
+    CCMenu* controls = nullptr;
+    CCLabelBMFont* status = nullptr;
+    dynamic::AttemptStats stats;
+    std::uint64_t completedSteps = 0;
+    std::uint64_t pendingStartStep = 0;
+    std::uint8_t pendingDelay = 0;
     float tickDt = 0;
     std::uint64_t tick = 0;
     dynamic::InputQueue pending;
     dynamic::Vehicle pendingVehicle = dynamic::Vehicle::unknown;
 } state;
 
+void updateControls() {
+    auto window = dynamic::clampWindow(Mod::get()->getSettingValue<int64_t>("window"));
+    auto visible = Mod::get()->getSettingValue<bool>("show-controls");
+    if (window > 0) state.lastWindow = window;
+    state.displayedWindow = window;
+    state.displayedControls = visible;
+    if (state.controls) state.controls->setVisible(visible);
+    if (state.status) {
+        state.status->setVisible(visible);
+        auto text = fmt::format("Assist: {} | {} ticks (F6/F7)\nCorrections: {} | delayed: {} ticks | last: {}",
+            window ? "ON" : "OFF", window, state.stats.corrected,
+            state.stats.delayedTicks, state.stats.lastDelay);
+        state.status->setString(text.c_str());
+    }
+}
 void inject(PlayLayer* layer, bool down) {
     state.injecting = true;
     layer->handleButton(down, 1, true);
@@ -86,7 +112,9 @@ void inject(PlayLayer* layer, bool down) {
     state.deliveredDown = down;
 }
 void forwardQueued(PlayLayer* layer, dynamic::QueuedInput const& event, char const* reason) {
+    state.stats.delivered(state.pendingStartStep, state.completedSteps);
     inject(layer, event.down);
+    updateControls();
     if (Mod::get()->getSettingValue<bool>("diagnostics")) {
         log::info("[Dynamic Assist diagnostic] queued input forwarded: reason={} input={} due_tick={} current_tick={}",
             reason, event.down ? "press" : "release", event.due, state.tick);
@@ -97,6 +125,7 @@ void discardPending(char const* reason) {
         log::info("[Dynamic Assist diagnostic] pending input discarded: {}", reason);
     }
     state.pending.clear();
+    state.pendingDelay = 0;
     state.pendingVehicle = dynamic::Vehicle::unknown;
 }
 void flush(PlayLayer* layer) {
@@ -104,7 +133,16 @@ void flush(PlayLayer* layer) {
         auto event = state.pending.pop(state.tick, true);
         forwardQueued(layer, *event, "flush");
     }
+    state.pendingDelay = 0;
     state.pendingVehicle = dynamic::Vehicle::unknown;
+}
+void setWindow(PlayLayer* layer, std::int64_t value) {
+    value = dynamic::clampWindow(value);
+    auto previous = dynamic::clampWindow(Mod::get()->getSettingValue<int64_t>("window"));
+    if (previous > 0) state.lastWindow = previous;
+    Mod::get()->setSettingValue<int64_t>("window", value);
+    if (!state.pending.empty() && dynamic::pendingExceedsWindow(state.pendingDelay, value)) flush(layer);
+    updateControls();
 }
 void resetState(PlayLayer* layer) {
     state.layer = layer;
@@ -116,7 +154,11 @@ void resetState(PlayLayer* layer) {
     state.deliveredDown = false;
     state.tick = 0;
     state.tickDt = 0;
+    state.completedSteps = 0;
+    state.pendingStartStep = 0;
+    state.stats = {};
     discardPending("level-reset");
+    updateControls();
 }
 
 dynamic::PredictionContext predictionContext(PlayerObject* p, PlayLayer* layer, bool enabled) {
@@ -183,6 +225,9 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
     if (state.tickDt <= 0) { state.issue = SimulationIssue::noTick; return dynamic::Verdict::unknown; }
     if (Clock::now() >= deadline) { state.issue = SimulationIssue::deadline; return dynamic::Verdict::unknown; }
     state.simulating = true;
+    struct SimulationGuard {
+        ~SimulationGuard() { state.simulating = false; }
+    } simulationGuard;
     state.simDead = false;
     state.uncertain = false;
     ghost->copyAttributes(player);
@@ -209,18 +254,21 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
     pauseTree(state.holder);
 
     constexpr unsigned horizon = 32;
-    for (unsigned i = 0; i < horizon + delay; ++i) {
-        if (Clock::now() >= deadline) { state.uncertain = true; state.issue = SimulationIssue::deadline; break; }
+    auto expired = [&] {
+        if (Clock::now() < deadline) return false;
+        state.issue = SimulationIssue::deadline;
+        return true;
+    };
+    return dynamic::runPredictionSteps(horizon + delay, expired, [&](unsigned i) {
         if (i == delay) button(ghost, down);
         ghost->update(state.tickDt);
         clearLogs(ghost);
-        layer->checkCollisions(ghost, state.tickDt, false);
-        if (state.simDead || state.uncertain) break;
-    }
-    auto result = state.uncertain ? dynamic::Verdict::unknown :
-        state.simDead ? dynamic::Verdict::unsafe : dynamic::Verdict::safe;
-    state.simulating = false;
-    return result;
+        if (!state.simDead && !state.uncertain) {
+            layer->checkCollisions(ghost, state.tickDt, false);
+        }
+        return state.uncertain ? dynamic::Verdict::unknown :
+            state.simDead ? dynamic::Verdict::unsafe : dynamic::Verdict::safe;
+    });
 }
 } // namespace
 
@@ -236,7 +284,7 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             if (diagnostics) log::info("[Dynamic Assist diagnostic] ignored button={} player1={}", buttonId, player1);
             return GJBaseGameLayer::handleButton(down, buttonId, player1);
         }
-        auto window = std::clamp<int64_t>(Mod::get()->getSettingValue<int64_t>("window"), 0, 8);
+        auto window = dynamic::clampWindow(Mod::get()->getSettingValue<int64_t>("window"));
         auto* player = layer->m_player1;
         if (!player) {
             if (diagnostics) log::info("[Dynamic Assist diagnostic] input ignored: missing-player");
@@ -268,7 +316,8 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             return GJBaseGameLayer::handleButton(down, buttonId, player1);
         }
         auto start = Clock::now();
-        auto deadline = start + std::chrono::milliseconds(5);
+        auto budget = std::clamp<int64_t>(Mod::get()->getSettingValue<int64_t>("budget"), 1, 33);
+        auto deadline = start + std::chrono::milliseconds(budget);
         auto decision = dynamic::chooseDelay(static_cast<std::uint8_t>(window), [&](std::uint8_t delay) {
             return simulate(layer, down, delay, deadline);
         });
@@ -279,6 +328,8 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
                 static_cast<unsigned>(decision.delay), decision.attempts, issueName(state.issue), state.tickDt, elapsed);
         }
         if (decision.delay) {
+            state.pendingStartStep = state.completedSteps;
+            state.pendingDelay = decision.delay;
             state.pending.addAfterSteps(down, state.tick, decision.delay);
             state.pendingVehicle = context.vehicle;
             log::info("Dynamic Assist: planned delay {} tick(s)", static_cast<unsigned>(decision.delay));
@@ -292,7 +343,8 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
         if (!state.simulating || player != state.ghost || !objects)
             return GJBaseGameLayer::collisionCheckObjects(player, objects, count, dt);
         gd::vector<GameObject*> filtered;
-        auto limit = std::min<int>(count, static_cast<int>(objects->size()));
+        auto limit = std::max(0, std::min<int>(count, static_cast<int>(objects->size())));
+        filtered.reserve(static_cast<std::size_t>(std::min(limit, 64)));
         for (int i = 0; i < limit; ++i) {
             auto* object = (*objects)[i];
             if (!object || object->m_isGroupDisabled || object->m_isDisabled) continue;
@@ -342,25 +394,40 @@ class $modify(DynamicPlayer, PlayerObject) {
         auto* layer = PlayLayer::get();
         if (!state.simulating && layer && layer == state.layer && this == layer->m_player1) {
             ++state.tick;
-            if (dt > 0 && dt < 2) state.tickDt = dt;
-            bool pressed = (GetAsyncKeyState(VK_F6) & 0x8000) != 0;
+            state.tickDt = dynamic::validTickDuration(dt) ? dt : 0.f;
+            DWORD foregroundProcess = 0;
+            auto* foreground = GetForegroundWindow();
+            if (foreground) GetWindowThreadProcessId(foreground, &foregroundProcess);
+            bool focused = foregroundProcess == GetCurrentProcessId();
+            bool pressed = focused && (GetAsyncKeyState(VK_F6) & 0x8000) != 0;
             if (pressed && !state.f6Down) {
-                auto value = Mod::get()->getSettingValue<int64_t>("window");
-                auto next = (value + 1) % 9;
-                Mod::get()->setSettingValue<int64_t>("window", next);
+                auto next = dynamic::nextWindow(Mod::get()->getSettingValue<int64_t>("window"));
+                setWindow(layer, next);
                 log::info("Dynamic Assist window: {} ticks", next);
-                if (next == 0) flush(layer);
             }
             state.f6Down = pressed;
-            auto context = predictionContext(this, layer,
-                Mod::get()->getSettingValue<int64_t>("window") > 0);
+            bool toggle = focused && (GetAsyncKeyState(VK_F7) & 0x8000) != 0;
+            if (toggle && !state.f7Down) {
+                setWindow(layer, dynamic::toggleWindow(Mod::get()->getSettingValue<int64_t>("window"), state.lastWindow));
+            }
+            state.f7Down = toggle;
+            if (state.displayedWindow != dynamic::clampWindow(Mod::get()->getSettingValue<int64_t>("window")) ||
+                state.displayedControls != Mod::get()->getSettingValue<bool>("show-controls")) updateControls();
+            auto window = dynamic::clampWindow(Mod::get()->getSettingValue<int64_t>("window"));
+            auto context = predictionContext(this, layer, window > 0);
             if (!state.pending.empty() &&
-                dynamic::pendingInvalidated(context, state.pendingVehicle))
+                (state.tickDt == 0.f || dynamic::pendingInvalidated(context, state.pendingVehicle) ||
+                 dynamic::pendingExceedsWindow(state.pendingDelay, window)))
                 flush(layer);
             while (auto event = state.pending.pop(state.tick)) forwardQueued(layer, *event, "scheduled");
-            if (state.pending.empty()) state.pendingVehicle = dynamic::Vehicle::unknown;
+            if (state.pending.empty()) {
+                state.pendingDelay = 0;
+                state.pendingVehicle = dynamic::Vehicle::unknown;
+            }
         }
         PlayerObject::update(dt);
+        if (!state.simulating && layer && layer == state.layer && this == layer->m_player1)
+            ++state.completedSteps;
     }
     void incrementJumps() {
         if (!state.simulating) PlayerObject::incrementJumps();
@@ -385,7 +452,39 @@ class $modify(DynamicPlayLayer, PlayLayer) {
         if (!PlayLayer::init(level, replay, skipObjects)) return false;
         state = State{};
         resetState(this);
+        auto size = CCDirector::sharedDirector()->getWinSize();
+        auto* menu = CCMenu::create();
+        menu->setPosition({0, 0});
+        menu->setID("dynamic-assist-controls");
+        this->addChild(menu, 1000);
+        state.controls = menu;
+        auto* status = CCLabelBMFont::create("", "bigFont.fnt");
+        status->setScale(0.28f);
+        status->setAnchorPoint({0, 1});
+        status->setPosition({8, size.height - 8});
+        this->addChild(status, 1001);
+        state.status = status;
+        auto addControl = [&](char const* text, float x, SEL_MenuHandler callback) {
+            auto* label = CCLabelBMFont::create(text, "bigFont.fnt");
+            auto* item = CCMenuItemSpriteExtra::create(label, this, callback);
+            item->setScale(0.45f);
+            item->setPosition({x, size.height - 43});
+            menu->addChild(item);
+        };
+        addControl("ON/OFF", 35, menu_selector(DynamicPlayLayer::onAssistToggle));
+        addControl("-", 85, menu_selector(DynamicPlayLayer::onAssistLess));
+        addControl("+", 110, menu_selector(DynamicPlayLayer::onAssistMore));
+        updateControls();
         return true;
+    }
+    void onAssistToggle(CCObject*) {
+        setWindow(this, dynamic::toggleWindow(Mod::get()->getSettingValue<int64_t>("window"), state.lastWindow));
+    }
+    void onAssistLess(CCObject*) {
+        setWindow(this, dynamic::clampWindow(Mod::get()->getSettingValue<int64_t>("window")) - 1);
+    }
+    void onAssistMore(CCObject*) {
+        setWindow(this, dynamic::clampWindow(Mod::get()->getSettingValue<int64_t>("window")) + 1);
     }
     void resetLevel() {
         resetState(this);
@@ -393,6 +492,8 @@ class $modify(DynamicPlayLayer, PlayLayer) {
     }
     void onQuit() {
         state.layer = nullptr;
+        state.controls = nullptr;
+        state.status = nullptr;
         state.ghost = nullptr;
         state.holder = nullptr;
         state.ghostVehicle = dynamic::Vehicle::unknown;

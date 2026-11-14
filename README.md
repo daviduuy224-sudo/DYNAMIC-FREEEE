@@ -10,7 +10,23 @@ Coloca `dynamicassist.practice.geode` en la carpeta `Geometry Dash/geode/mods` y
 
 ## Uso
 
-- Empieza desactivado. Pulsa F6 dentro de un nivel para recorrer los márgenes de 0 a 8 ticks; 0 desactiva la asistencia. También se puede configurar en los ajustes del mod de Geode.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:e6c194d601f543857de41fed979ec786d01c1acdd3e7e0c4810907afb1a8f097 -->
+
+- Empieza desactivado. Los botones **ON/OFF**, **-** y **+** dentro del nivel activan o desactivan la asistencia y ajustan el margen de 0 a 16 ticks. F6 recorre esos valores; F7 alterna entre 0 y el último margen seleccionado (1 si aún no hay uno). También puedes cambiar el margen en los ajustes del mod de Geode.
+- La interfaz muestra los clics corregidos, los ticks realmente retrasados y el último retraso de cada intento. Una entrada pendiente interrumpida se cuenta solo por los ticks que llegaron a transcurrir; las entradas descartadas no se cuentan. **Show in-level controls** permite ocultar los controles.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:f98c5183c90792e8e75091694fb1bad7e7d268779ad6d207277e2cf7f46c4b47 -->
+
+<!-- coderabbit-ai-generated-section:v1:81d26a16339d14f979dc1e595068d1b1ba6ccf68332d1b7dcd64f1af9880b803 -->
+
+- **Prediction time budget** ajusta el tiempo máximo dedicado a cada entrada entre 1 y 33 ms (12 ms por defecto). Un presupuesto mayor permite evaluar más candidatos, pero puede reducir los FPS y no garantiza que la simulación termine. El impacto depende del equipo y del nivel.
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+<!-- /coderabbit-ai-generated:v1 -->
 <!-- coderabbit-ai-generated:v1 -->
 
 <!-- coderabbit-ai-generated-section:v1:df0ef8ff5b1acdff7815a22d8ce23d3407b5dbf01a0a055f42258bcf196e87c8 -->
@@ -26,7 +42,14 @@ Coloca `dynamicassist.practice.geode` en la carpeta `Geometry Dash/geode/mods` y
 
 <!-- coderabbit-ai-generated-section:v1:ca05be8e88cdea43c0fddd1f04b29aedaa7d662ddecc896d5a1e363bf661807d -->
 
-- Si la predicción no resulta clara, se envía la entrada original. Si llega otra entrada mientras hay una pendiente, esta se entrega inmediatamente antes de la nueva. Los retrasos previstos aparecen en el registro de Geode.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:1785ef27a800626443ffcf36388afdec9edfd39fa1adb96630aee389b051ed24 -->
+
+- Si la predicción no resulta clara o agota su presupuesto, se envía la entrada original. Si llega otra entrada mientras hay una pendiente, esta se entrega inmediatamente antes de la nueva. Los retrasos previstos aparecen en el registro de Geode.
+- Una entrada pendiente se entrega también si el tick de física no es válido o si se reduce el margen por debajo de su retraso previsto. F6 y F7 responden mientras la ventana del juego está en primer plano.
+
+<!-- /coderabbit-ai-generated:v1 -->
 <!-- coderabbit-ai-generated:v1 -->
 
 <!-- coderabbit-ai-generated-section:v1:1458e99181d8ee00db5c592757573eb254e81045f9adbdc82035e2cd0ce64da7 -->
@@ -57,7 +80,15 @@ La simulación usa un jugador oculto y una ventana de predicción corta. No repr
 
 ## Compilación
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:144b70d23e249d66e696ca1eb8dd6716e6c6f4cd895dca82cfdff4c9217f5622 -->
+
 Instala Geode SDK 5.11.2 y Geode CLI para Windows, define `GEODE_SDK` con la ruta del SDK y ejecuta `cmake -S . -B build` seguido de `cmake --build build --config Release`.
+
+El flujo de GitHub Actions `Validate and build` ejecuta las pruebas y compila el mod para Windows. Cuando termine correctamente, descarga el artefacto `DynamicAssist-Windows` desde la ejecución. El archivo `DynamicAssist-v0.2.2.geode` incluido en el repositorio es la versión anterior y no contiene estos cambios.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 ## Licencia
 

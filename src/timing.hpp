@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <functional>
 
@@ -9,6 +10,24 @@ namespace dynamic {
 // predict (for example, a portal or an exhausted time budget).
 enum class Verdict { safe, unsafe, unknown };
 enum class DecisionReason { disabled, safeNow, unknownInitial, delayed, unknownCandidate, noSafeTick };
+
+// Invalid physics steps cannot be used as a prediction clock.
+inline bool validTickDuration(float dt) {
+    return std::isfinite(dt) && dt > 0.f && dt < 2.f;
+}
+
+// Check both sides of each step: an individual update or collision check can
+// itself exceed the deadline, including on the very last step.
+template <typename Expired, typename Step>
+Verdict runPredictionSteps(unsigned steps, Expired&& expired, Step&& step) {
+    for (unsigned i = 0; i < steps; ++i) {
+        if (expired()) return Verdict::unknown;
+        auto result = step(i);
+        if (expired()) return Verdict::unknown;
+        if (result != Verdict::safe) return result;
+    }
+    return Verdict::safe;
+}
 
 struct Decision {
     std::uint8_t delay = 0;

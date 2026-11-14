@@ -1,0 +1,43 @@
+name: Validate and build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run standalone tests
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p /tmp/dynamic-assist-tests
+          for source in tests/*_test.cpp; do
+            name=$(basename "$source" .cpp)
+            g++ -std=c++23 -Wall -Wextra -Werror "$source" -o "/tmp/dynamic-assist-tests/$name"
+            "/tmp/dynamic-assist-tests/$name"
+          done
+
+  windows:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Windows mod
+        id: build
+        uses: geode-sdk/build-geode-mod@61a56c697aea9655e3f31c6c1b83870431f30434
+        with:
+          sdk: given
+          cli: v4.0.1
+          target: Win64
+      - name: Upload mod
+        uses: actions/upload-artifact@v4
+        with:
+          name: DynamicAssist-Windows
+          path: ${{ steps.build.outputs.build-output }}/*.geode
+          if-no-files-found: error

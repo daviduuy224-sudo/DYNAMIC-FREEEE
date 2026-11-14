@@ -1,6 +1,7 @@
 #include "../src/timing.hpp"
 
 #include <cassert>
+#include <limits>
 #include <vector>
 
 using dynamic::Verdict;
@@ -8,6 +9,27 @@ using dynamic::DecisionReason;
 
 int main() {
     using dynamic::chooseDelay;
+    using dynamic::runPredictionSteps;
+    using dynamic::validTickDuration;
+    assert(validTickDuration(1.f / 240.f));
+    assert(!validTickDuration(0.f) && !validTickDuration(-1.f));
+    assert(!validTickDuration(2.f) && !validTickDuration(std::numeric_limits<float>::infinity()));
+    assert(!validTickDuration(std::numeric_limits<float>::quiet_NaN()));
+
+    unsigned checks = 0, simulated = 0;
+    auto deadline = [&] { return ++checks >= 4; }; // expires during step 2
+    auto safeStep = [&](unsigned) { ++simulated; return Verdict::safe; };
+    assert(runPredictionSteps(2, deadline, safeStep) == Verdict::unknown);
+    assert(simulated == 2); // includes expiration after the last step
+    checks = simulated = 0;
+    auto before = [&] { return true; };
+    assert(runPredictionSteps(2, before, safeStep) == Verdict::unknown && simulated == 0);
+    auto never = [] { return false; };
+    auto collision = [&](unsigned i) { ++simulated; return i == 1 ? Verdict::unsafe : Verdict::safe; };
+    assert(runPredictionSteps(4, never, collision) == Verdict::unsafe && simulated == 2);
+    simulated = 0;
+    auto uncertain = [&](unsigned) { ++simulated; return Verdict::unknown; };
+    assert(runPredictionSteps(4, never, uncertain) == Verdict::unknown && simulated == 1);
     std::vector<int> calls;
     auto safe = [&](std::uint8_t tick) { calls.push_back(tick); return Verdict::safe; };
     auto disabled = chooseDelay(0, safe);
@@ -36,6 +58,10 @@ int main() {
     assert(unknown.reason == DecisionReason::unknownCandidate && unknown.attempts == 2);
     auto initialUnknown = chooseDelay(3, [](std::uint8_t) { return Verdict::unknown; });
     assert(initialUnknown.reason == DecisionReason::unknownInitial && initialUnknown.attempts == 1);
+    auto aboveEight = chooseDelay(16, [](std::uint8_t tick) {
+        return tick == 12 ? Verdict::safe : Verdict::unsafe;
+    });
+    assert(aboveEight.delay == 12 && aboveEight.attempts == 13 && aboveEight.predictionComplete);
     auto lastTick = chooseDelay(255, [](std::uint8_t tick) {
         return tick == 255 ? Verdict::safe : Verdict::unsafe;
     });

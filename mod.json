@@ -3,7 +3,7 @@
   "gd": {
     "win": "2.2081"
   },
-  "version": "v0.2.2",
+  "version": "v0.3.0",
   "id": "dynamicassist.practice",
   "name": "Dynamic Assist",
   "developer": "Dynamic Assist",
@@ -15,13 +15,27 @@
       "description": "Maximum delay for an early input. Set to 0 for unmodified input.",
       "default": 0,
       "min": 0,
-      "max": 8
+      "max": 16
     },
     "diagnostics": {
       "type": "bool",
       "name": "Diagnostic log",
       "description": "Record why clicks were or were not adjusted in the local Geode log. Turn off after testing.",
       "default": false
+    },
+    "budget": {
+      "type": "int",
+      "name": "Prediction time budget (ms)",
+      "description": "Maximum time spent searching per input. Higher values can cause frame drops; uncertain predictions pass through unchanged.",
+      "default": 12,
+      "min": 1,
+      "max": 33
+    },
+    "show-controls": {
+      "type": "bool",
+      "name": "Show in-level controls",
+      "description": "Show the assistance controls and statistics during a level.",
+      "default": true
     }
   }
 }
