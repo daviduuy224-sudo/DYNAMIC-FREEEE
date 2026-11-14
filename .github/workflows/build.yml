@@ -41,14 +41,3 @@ jobs:
           name: DynamicAssist-Windows
           path: build/dynamicassist.practice.geode
           if-no-files-found: error
-      - name: Export package for retrieval
-        shell: pwsh
-        run: |
-          $package = 'build/dynamicassist.practice.geode'
-          Write-Output ((Get-FileHash $package -Algorithm SHA256).Hash)
-          $data = [Convert]::ToBase64String([IO.File]::ReadAllBytes($package))
-          Write-Output 'DYNAMIC_PACKAGE_BEGIN'
-          for ($i = 0; $i -lt $data.Length; $i += 512) {
-            Write-Output $data.Substring($i, [Math]::Min(512, $data.Length - $i))
-          }
-          Write-Output 'DYNAMIC_PACKAGE_END'
