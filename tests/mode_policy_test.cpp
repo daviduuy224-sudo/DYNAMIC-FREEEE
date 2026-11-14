@@ -22,8 +22,8 @@ int main() {
         assert(blockReason({.vehicle=mode, .enabled=true, .platformer=true}) == BlockReason::platformer);
         assert(blockReason({.vehicle=mode, .enabled=true, .controlsLocked=true}) == BlockReason::controlsLocked);
         if (mode != Vehicle::wave) {
-            assert(blockReason({.vehicle=mode, .enabled=true, .onSlope=true}) == BlockReason::slope);
-            assert(blockReason({.vehicle=mode, .enabled=true, .underForce=true}) == BlockReason::force);
+            assert(blockReason({.vehicle=mode, .enabled=true, .onSlope=true}) == BlockReason::none);
+            assert(blockReason({.vehicle=mode, .enabled=true, .underForce=true}) == BlockReason::none);
         }
         assert(!pendingInvalidated({.vehicle=mode, .enabled=true}, mode));
         assert(pendingInvalidated({.vehicle=mode, .enabled=false}, mode));
@@ -35,8 +35,8 @@ int main() {
         assert(!canPredict({.vehicle=mode, .enabled=true, .dual=true}));
         assert(!canPredict({.vehicle=mode, .enabled=true, .platformer=true}));
         assert(!canPredict({.vehicle=mode, .enabled=true, .controlsLocked=true}));
-        assert(canPredict({.vehicle=mode, .enabled=true, .onSlope=true}) == (mode == Vehicle::wave));
-        assert(canPredict({.vehicle=mode, .enabled=true, .underForce=true}) == (mode == Vehicle::wave));
+        assert(canPredict({.vehicle=mode, .enabled=true, .onSlope=true}) == true);
+        assert(canPredict({.vehicle=mode, .enabled=true, .underForce=true}) == true);
     }
     // Check the policy across combinations with checkpoint-backed dash support, including
     // several simultaneous reasons and wave's slope/force exception.
@@ -45,16 +45,15 @@ int main() {
             PredictionContext c{mode, bool(bits & 1), bool(bits & 2), bool(bits & 4),
                 bool(bits & 8), bool(bits & 16), bool(bits & 32), bool(bits & 64), bool(bits & 128)};
             bool original = c.enabled && !c.dead && !c.dual &&
-                !c.platformer && !c.controlsLocked &&
-                ((!c.onSlope && !c.underForce) || c.vehicle == Vehicle::wave);
+                !c.platformer && !c.controlsLocked;
             assert(canPredict(c) == original);
             assert((blockReason(c) == BlockReason::none) == original);
         }
     }
     assert(slopeDecision(true, false) == SlopeDecision::simulate);
     assert(slopeDecision(true, true) == SlopeDecision::simulate);
-    assert(slopeDecision(false, false) == SlopeDecision::ignore);
-    assert(slopeDecision(false, true) == SlopeDecision::unknown);
+    assert(slopeDecision(false, false) == SlopeDecision::simulate);
+    assert(slopeDecision(false, true) == SlopeDecision::simulate);
     // The engine counts force timers down below zero after they expire.
     assert(!hasActiveForce(-100, false));
     assert(!hasActiveForce(-1, false));
@@ -64,9 +63,9 @@ int main() {
     assert(hasActiveForce(-1, true));
     assert(canPredict({.vehicle=Vehicle::cube, .enabled=true,
         .underForce=hasActiveForce(-1, false)}));
-    assert(!canPredict({.vehicle=Vehicle::cube, .enabled=true,
+    assert(canPredict({.vehicle=Vehicle::cube, .enabled=true,
         .underForce=hasActiveForce(1, false)}));
-    assert(!canPredict({.vehicle=Vehicle::cube, .enabled=true,
+    assert(canPredict({.vehicle=Vehicle::cube, .enabled=true,
         .underForce=hasActiveForce(-1, true)}));
     assert(vehicleFor({.ship=true, .wave=true}) == Vehicle::unknown);
     assert(!canPredict({.vehicle=Vehicle::unknown, .enabled=true}));

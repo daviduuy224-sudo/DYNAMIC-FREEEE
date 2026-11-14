@@ -19,6 +19,7 @@
 #include "collision_policy.hpp"
 #include "portal_policy.hpp"
 #include "interaction_policy.hpp"
+#include "scoped_restore.hpp"
 #include "timing.hpp"
 #include "input_queue.hpp"
 #include "mode_policy.hpp"
@@ -240,12 +241,13 @@ GameObject* interactionCopy(GameObject* original) {
     if (!copy) return nullptr;
     state.scratchObjects.insert(copy);
     if (entry.generation == state.generation) return copy;
-    entry.generation = state.generation;
     copy->resetObject();
     copy->setPosition(original->getPosition());
     copy->setScaleX(original->getScaleX());
     copy->setScaleY(original->getScaleY());
     copy->setRotation(original->getRotation());
+    copy->setFlipX(original->isFlipX());
+    copy->setFlipY(original->isFlipY());
     copy->m_uniqueID = original->m_uniqueID;
     copy->m_objectType = original->m_objectType;
     copy->m_isNoTouch = original->m_isNoTouch;
@@ -286,6 +288,7 @@ GameObject* interactionCopy(GameObject* original) {
         dst->m_allowCollide = src->m_allowCollide;
         dst->m_stopSlide = src->m_stopSlide;
     }
+    entry.generation = state.generation;
     return copy;
 }
 
@@ -311,14 +314,19 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
     if (state.tickDt <= 0) { state.issue = SimulationIssue::noTick; return dynamic::Verdict::unknown; }
     if (Clock::now() >= deadline) { state.issue = SimulationIssue::deadline; return dynamic::Verdict::unknown; }
     state.simulating = true;
+    dynamic::ScopedRestore gameContext(layer->m_gameState,
+        &GJGameState::m_lastActivatedPortal1, &GJGameState::m_lastActivatedPortal2,
+        &GJGameState::m_portalY, &GJGameState::m_gravityRelated,
+        &GJGameState::m_playerStreakBlend, &GJGameState::m_isFreeMode,
+        &GJGameState::m_disableCameraGridSnap, &GJGameState::m_cameraPadding,
+        &GJGameState::m_cameraEasing, &GJGameState::m_isDualMode,
+        &GJGameState::m_unlinkDualGravity, &GJGameState::m_dualRelated,
+        &GJGameState::m_lastModeHeight, &GJGameState::m_cameraPosition,
+        &GJGameState::m_cameraLastPosition, &GJGameState::m_cameraOffset,
+        &GJGameState::m_activatedObjectIDs, &GJGameState::m_stateObjects);
     struct SimulationGuard {
-        PlayLayer* layer;
-        GJGameState saved;
-        ~SimulationGuard() {
-            layer->m_gameState = std::move(saved);
-            state.simulating = false;
-        }
-    } simulationGuard{layer, layer->m_gameState};
+        ~SimulationGuard() { state.simulating = false; }
+    } simulationGuard;
     state.simDead = false;
     state.uncertain = false;
     ++state.generation;
@@ -346,7 +354,9 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
     if (player->m_touchingRings) {
         for (unsigned i = 0; i < player->m_touchingRings->count(); ++i) {
             auto* ring = static_cast<RingObject*>(player->m_touchingRings->objectAtIndex(i));
-            if (!dynamic::nativeOrbOrPad(ring->m_objectType)) {
+            if (!dynamic::nativeOrbOrPad(ring->m_objectType) || ring->m_targetGroupID != 0) {
+                state.issueObjectID = ring->m_objectID;
+                state.issueObjectType = static_cast<int>(ring->m_objectType);
                 state.issue = SimulationIssue::ring;
                 return dynamic::Verdict::unknown;
             }
@@ -379,7 +389,12 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
 class $modify(DynamicGameLayer, GJBaseGameLayer) {
     void handleButton(bool down, int buttonId, bool player1) {
         auto* layer = PlayLayer::get();
-        if (state.simulating || state.injecting || !layer || static_cast<GJBaseGameLayer*>(layer) != static_cast<GJBaseGameLayer*>(this) ||
+        if (state.simulating) {
+            state.uncertain = true;
+            state.issue = SimulationIssue::activation;
+            return;
+        }
+        if (state.injecting || !layer || static_cast<GJBaseGameLayer*>(layer) != static_cast<GJBaseGameLayer*>(this) ||
             state.layer != layer) {
             return GJBaseGameLayer::handleButton(down, buttonId, player1);
         }
@@ -430,6 +445,8 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             return GJBaseGameLayer::handleButton(down, buttonId, player1);
         }
         player->saveToCheckpoint(state.checkpoint.data());
+        state.checkpoint->m_playEffects = false;
+        state.checkpoint->m_isHidden = true;
         auto start = Clock::now();
         auto budget = std::clamp<int64_t>(Mod::get()->getSettingValue<int64_t>("budget"), 1, 33);
         auto deadline = start + std::chrono::milliseconds(budget);
@@ -441,8 +458,7 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             log::info("[Dynamic Assist diagnostic] input={} mode={} window={} result={} delay={} attempts={} issue={} object_id={} object_type={} tick_dt={} elapsed_us={}",
                 down ? "press" : "release", static_cast<int>(context.vehicle), window, decisionName(decision.reason),
                 static_cast<unsigned>(decision.delay), decision.attempts, issueName(state.issue),
-                state.issue == SimulationIssue::object ? state.issueObjectID : -1,
-                state.issue == SimulationIssue::object ? state.issueObjectType : -1, state.tickDt, elapsed);
+                state.issueObjectID, state.issueObjectType, state.tickDt, elapsed);
         }
         switch (decision.reason) {
             case dynamic::DecisionReason::safeNow:
@@ -453,8 +469,8 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
                 break;
             case dynamic::DecisionReason::unknownInitial:
             case dynamic::DecisionReason::unknownCandidate:
-                if (state.issue == SimulationIssue::object) {
-                    showResult(fmt::format("Objeto no compatible: ID {} tipo {}", state.issueObjectID, state.issueObjectType));
+                if (state.issueObjectID >= 0) {
+                    showResult(fmt::format("Interaccion no simulada: ID {} tipo {}", state.issueObjectID, state.issueObjectType));
                 } else {
                     showResult(fmt::format("Prediccion incompleta: {}", issueName(state.issue)));
                 }
@@ -490,15 +506,7 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             auto type = object->m_objectType;
             auto category = dynamic::collisionCategory(type);
             if (category == dynamic::CollisionCategory::slope) {
-                bool overlaps = !player->m_isDart && (object->m_objectRadius > 0.f
-                    ? GJBaseGameLayer::playerCircleCollision(player, object)
-                    : object->getObjectRect(2.f, 2.f).intersectsRect(player->getObjectRect()));
-                auto slope = dynamic::slopeDecision(player->m_isDart, overlaps);
-                if (slope == dynamic::SlopeDecision::simulate) filtered.push_back(object);
-                if (slope == dynamic::SlopeDecision::unknown) {
-                    state.uncertain = true;
-                    state.issue = SimulationIssue::slope;
-                }
+                filtered.push_back(object);
                 continue;
             }
             auto portal = dynamic::portalAction(type);
@@ -509,6 +517,8 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
                 if (effect && effect->m_targetGroupID != 0 &&
                     object->getObjectRect().intersectsRect(player->getObjectRect())) {
                     state.uncertain = true; state.issue = SimulationIssue::activation;
+                    state.issueObjectID = object->m_objectID;
+                    state.issueObjectType = static_cast<int>(type);
                     return;
                 }
                 auto* copy = interactionCopy(object);
@@ -530,6 +540,8 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
                     : object->getObjectRect().intersectsRect(player->getObjectRect());
                 if (overlaps && state.activatedPortals.insert(object).second) {
                     dynamic::applyPortal(*player, portal);
+                    player->m_lastPortalPos = object->getPosition();
+                    player->m_lastActivatedPortal = object;
                     if (vehicle != dynamic::Vehicle::unknown) {
                         dynamic::changeMode(player, type);
                         // Only candidate game state is changed; the guard restores
@@ -549,6 +561,18 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             }
         }
         GJBaseGameLayer::collisionCheckObjects(player, &filtered, static_cast<int>(filtered.size()), dt);
+    }
+    void reverseDirection(EffectGameObject* object) {
+        if (state.simulating) { state.uncertain = true; state.issue = SimulationIssue::activation; return; }
+        GJBaseGameLayer::reverseDirection(object);
+    }
+    void rotateGameplay(RotateGameplayGameObject* object) {
+        if (state.simulating) { state.uncertain = true; state.issue = SimulationIssue::activation; return; }
+        GJBaseGameLayer::rotateGameplay(object);
+    }
+    void teleportPlayer(TeleportPortalObject* object, PlayerObject* player) {
+        if (state.simulating) { state.uncertain = true; state.issue = SimulationIssue::activation; return; }
+        GJBaseGameLayer::teleportPlayer(object, player);
     }
     void flipGravity(PlayerObject* player, bool flip, bool noEffects) {
         if (state.simulating) {
@@ -651,7 +675,7 @@ class $modify(DynamicObject, GameObject) {
 class $modify(DynamicEffect, EffectGameObject) {
     void triggerObject(GJBaseGameLayer* layer, int id, gd::vector<int> const* keys) {
         if (!state.simulating) EffectGameObject::triggerObject(layer, id, keys);
-        else if (this->m_targetGroupID != 0) {
+        else if (!state.scratchObjects.contains(this) || this->m_targetGroupID != 0) {
             // A custom group effect needs future world simulation as well.
             state.uncertain = true;
             state.issue = SimulationIssue::activation;
@@ -716,7 +740,11 @@ class $modify(DynamicPlayLayer, PlayLayer) {
         PlayLayer::onQuit();
     }
     void destroyPlayer(PlayerObject* player, GameObject* object) {
-        if (state.simulating && player == state.ghost) { state.simDead = true; return; }
+        if (state.simulating) {
+            if (player == state.ghost) state.simDead = true;
+            else { state.uncertain = true; state.issue = SimulationIssue::activation; }
+            return;
+        }
         discardPending("player-died");
         PlayLayer::destroyPlayer(player, object);
     }

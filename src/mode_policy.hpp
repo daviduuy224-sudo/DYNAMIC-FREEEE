@@ -32,12 +32,11 @@ constexpr bool hasActiveForce(int remainingTicks, bool affectedByForces) {
     return remainingTicks > 0 || affectedByForces;
 }
 
-// Non-wave slope physics is not modeled completely. Preserve wave behavior,
-// but stop the prediction if another mode would touch a slope.
+// Native checkpoints restore slope contacts and velocities for every vehicle.
+// The collision engine now resolves slopes for the candidate player itself.
 enum class SlopeDecision { simulate, ignore, unknown };
-constexpr SlopeDecision slopeDecision(bool isWave, bool overlaps) {
-    if (isWave) return SlopeDecision::simulate;
-    return overlaps ? SlopeDecision::unknown : SlopeDecision::ignore;
+constexpr SlopeDecision slopeDecision(bool, bool) {
+    return SlopeDecision::simulate;
 }
 
 struct PredictionContext {
@@ -63,8 +62,7 @@ constexpr BlockReason blockReason(PredictionContext c) {
     if (c.dual) return BlockReason::dual;
     if (c.platformer) return BlockReason::platformer;
     if (c.controlsLocked) return BlockReason::controlsLocked;
-    if (c.vehicle != Vehicle::wave && c.onSlope) return BlockReason::slope;
-    if (c.vehicle != Vehicle::wave && c.underForce) return BlockReason::force;
+    // Existing slope/force state is restored by the native checkpoint.
     return BlockReason::none;
 }
 

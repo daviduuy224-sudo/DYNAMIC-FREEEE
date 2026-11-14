@@ -24,7 +24,13 @@ Coloca `dynamicassist.practice.geode` en la carpeta `Geometry Dash/geode/mods` y
 
 <!-- coderabbit-ai-generated-section:v1:e79d96579e974a355d365f16a8354abeb23543a6f24382e9604d68168fdf0b3d -->
 
-- Si aparece `window-zero`, activa la asistencia y aumenta el margen. `time-budget` indica que la simulación agotó el tiempo; puedes aumentar **Prediction time budget**. `Objeto no compatible` muestra el ID y el tipo numérico del objeto que interrumpió la predicción; si activas **Diagnostic log**, estos datos aparecen como `object_id` y `object_type` en el registro. Comparte ambos números y el porcentaje del nivel al informar de un problema. `ring`, `dual`, `platformer`, `slope` y `force` también señalan situaciones que este prototipo no puede predecir con confianza. `no-physics-tick` indica que todavía no hay un tick válido.
+- Si aparece `window-zero`, activa la asistencia y aumenta el margen. `time-budget` indica que la simulación agotó el tiempo; puedes aumentar **Prediction time budget**. `Objeto no compatible` muestra el ID y el tipo numérico del objeto que interrumpió la predicción; si activas **Diagnostic log**, estos datos aparecen como `object_id` y `object_type` en el registro. Comparte ambos números y el porcentaje del nivel al informar de un problema. <!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:6515b958e9fc606b12e4466db277514215ada4c97c133ddc87737e9a55299cb2 -->
+
+`ring` señala un contacto que no pudo copiarse o un orbe con efectos de grupo. `dual` y `platformer` señalan modos que este prototipo todavía no puede predecir con confianza.
+
+<!-- /coderabbit-ai-generated:v1 --> `no-physics-tick` indica que todavía no hay un tick válido.
 
 <!-- /coderabbit-ai-generated:v1 -->
 
@@ -57,7 +63,13 @@ Coloca `dynamicassist.practice.geode` en la carpeta `Geometry Dash/geode/mods` y
 
 <!-- coderabbit-ai-generated-section:v1:53f00f2a509fa1504a21eca1aa38e31ec4c8429809854321cf5ab71edd2a9086 -->
 
-- Los objetos que Geometry Dash clasifica como sólidos, peligros o peligros animados se pasan al motor de colisiones según su tipo, sin una lista de IDs. Las pendientes tienen un tratamiento aparte. La simulación aplica los portales de gravedad normal/invertida y de tamaño normal/mini al jugador oculto mediante sus funciones nativas sin efectos visuales. Los orbes, portales de vehículo/velocidad, bloques rompibles y otros objetos todavía interrumpen la predicción. La cobertura y precisión de estos cambios requieren una prueba dentro del juego.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:2712945a6783f147cc46d17d18a7aeb157e3c0ccae12646d44df9ee368a798cc -->
+
+- Los sólidos, peligros y peligros animados se pasan al motor de colisiones por tipo, sin una lista de IDs. La versión 0.4.0 añade portales de los ocho vehículos, gravedad y tamaño; portales de velocidad 200, 201, 202, 203 y 1334; orbes amarillos, rosas, azules, verdes, rojos, negros, dash y araña, y pads amarillos, rosas, azules, rojos y de araña. Orbes y pads usan copias privadas y sus colisiones nativas. Las activaciones no se escriben sobre los objetos reales. Se requiere comprobar estas interacciones dentro del juego; una compilación correcta no demuestra precisión de física.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 <!-- /coderabbit-ai-generated:v1 -->
 
@@ -104,7 +116,21 @@ Coloca `dynamicassist.practice.geode` en la carpeta `Geometry Dash/geode/mods` y
 
 <!-- coderabbit-ai-generated-section:v1:21a0002b3666c0616ea719d684b3442af1a14ad4c1e6939a2da4204801993050 -->
 
-La simulación usa un jugador oculto y una ventana de predicción corta. No reproduce necesariamente el comportamiento de objetos móviles, triggers, portales ni de otros mods. En vehículos distintos de wave se deja pasar la entrada original si el jugador está en una pendiente, bajo una fuerza o si la trayectoria simulada toca una pendiente. Puede fallar o causar resultados inesperados; su precisión en niveles reales y en cada vehículo no está verificada. Esta versión no ofrece las demás funciones del mod privado Dynamic.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:775bde7f1f5e696a97a062f5173891f8424ce6e9badf953cfb3b844d5074361f -->
+
+La simulación usa un jugador oculto y una ventana corta. Cada candidato se restaura con un checkpoint nativo; su estado de juego temporal se restaura al terminar, incluso si se agota el presupuesto. El dash ya puede predecirse con una copia de su orbe. Este cambio amplía el comportamiento anterior, que interrumpía la predicción ante orbes, dash y portales de vehículo/velocidad.
+
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:b5c68e884f09f98f0edc627d496f72a02e3b40485ea355f02b2f3a4c3c4ade84 -->
+
+No se simula el futuro completo del nivel: los triggers, objetos móviles, efectos de otros mods, portales de teletransporte, dual y plataforma siguen requiriendo tratamiento adicional. Los orbes que activan grupos personalizados se consideran inciertos. Las pendientes y fuerzas que ya afectan al jugador usan ahora el estado del checkpoint y la física nativa; esta ampliación sustituye el bloqueo anterior fuera de wave. Los cambios de vehículo usan las funciones nativas del jugador y el contexto del portal, pero no se ha verificado dentro del juego la transición del techo/suelo de la nave ni los ajustes de cámara. Puede fallar o causar resultados inesperados. Esta versión no ofrece todas las funciones del mod privado Dynamic.
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 <!-- /coderabbit-ai-generated:v1 -->
 
