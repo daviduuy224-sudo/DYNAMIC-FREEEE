@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <string>
 #include "controls.hpp"
+#include "collision_policy.hpp"
 #include "timing.hpp"
 #include "input_queue.hpp"
 #include "mode_policy.hpp"
@@ -394,7 +395,8 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             auto* object = (*objects)[i];
             if (!object || object->m_isGroupDisabled || object->m_isDisabled) continue;
             auto type = object->m_objectType;
-            if (type == GameObjectType::Slope) {
+            auto category = dynamic::collisionCategory(type);
+            if (category == dynamic::CollisionCategory::slope) {
                 bool overlaps = !player->m_isDart && (object->m_objectRadius > 0.f
                     ? GJBaseGameLayer::playerCircleCollision(player, object)
                     : object->getObjectRect(2.f, 2.f).intersectsRect(player->getObjectRect()));
@@ -406,10 +408,9 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
                 }
                 continue;
             }
-            if (type == GameObjectType::Solid || type == GameObjectType::Hazard ||
-                type == GameObjectType::AnimatedHazard) {
+            if (category == dynamic::CollisionCategory::geometry) {
                 filtered.push_back(object);
-            } else if (type != GameObjectType::Decoration &&
+            } else if (category == dynamic::CollisionCategory::unsupported &&
                        object->getObjectRect().intersectsRect(player->getObjectRect())) {
                 state.uncertain = true;
                 state.issue = SimulationIssue::object;

@@ -44,7 +44,20 @@ Coloca `dynamicassist.practice.geode` en la carpeta `Geometry Dash/geode/mods` y
 
 <!-- coderabbit-ai-generated-section:v1:df0ef8ff5b1acdff7815a22d8ce23d3407b5dbf01a0a055f42258bcf196e87c8 -->
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:f258328710015f692d8ebf1465a151908e2e73545f7fa67ea48850208fc4e5d0 -->
+
 - Intenta corregir pulsaciones y liberaciones tempranas en cubo, nave, OVNI, bola, wave, robot, araña y swing. Retarda una entrada cuando la trayectoria simulada parece más segura; no puede adelantar una pulsación tardía. La asistencia es experimental y no admite dual ni modo plataforma.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:0922db1ff39fcb3ad49b8fe07f3ebc0849fa77ba978ccd273fa5418acce39bc7 -->
+
+- Los objetos que Geometry Dash clasifica como sólidos, peligros o peligros animados se pasan al motor de colisiones según su tipo, sin una lista de IDs. Las pendientes tienen un tratamiento aparte. Los portales, orbes, bloques rompibles y otros objetos aún pueden interrumpir la predicción; la cobertura y precisión de cada objeto no están verificadas en el juego.
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 <!-- /coderabbit-ai-generated:v1 -->
 <!-- coderabbit-ai-generated:v1 -->
