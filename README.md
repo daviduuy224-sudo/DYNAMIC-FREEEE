@@ -20,7 +20,13 @@ Coloca `dynamicassist.practice.geode` en la carpeta `Geometry Dash/geode/mods` y
 <!-- coderabbit-ai-generated-section:v1:b2cdadc253c6f1e31fd363f0b3f342d78bb24a792106722c443d09c85b277bf6 -->
 
 - La interfaz muestra los clics corregidos, los ticks realmente retrasados, el último retraso y el motivo del último resultado. Una entrada pendiente interrumpida se cuenta solo por los ticks que llegaron a transcurrir; las entradas descartadas no se cuentan. **Show in-level controls** permite ocultar los controles.
-- Si aparece `window-zero`, activa la asistencia y aumenta el margen. `time-budget` indica que la simulación agotó el tiempo; puedes aumentar **Prediction time budget**. `unsupported-object`, `ring`, `dual`, `platformer`, `slope` y `force` señalan situaciones que este prototipo no puede predecir con confianza. `no-physics-tick` indica que todavía no hay un tick válido.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:e79d96579e974a355d365f16a8354abeb23543a6f24382e9604d68168fdf0b3d -->
+
+- Si aparece `window-zero`, activa la asistencia y aumenta el margen. `time-budget` indica que la simulación agotó el tiempo; puedes aumentar **Prediction time budget**. `Objeto no compatible` muestra el ID y el tipo numérico del objeto que interrumpió la predicción; si activas **Diagnostic log**, estos datos aparecen como `object_id` y `object_type` en el registro. Comparte ambos números y el porcentaje del nivel al informar de un problema. `ring`, `dual`, `platformer`, `slope` y `force` también señalan situaciones que este prototipo no puede predecir con confianza. `no-physics-tick` indica que todavía no hay un tick válido.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 <!-- /coderabbit-ai-generated:v1 -->
 <!-- coderabbit-ai-generated:v1 -->

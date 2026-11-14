@@ -72,6 +72,8 @@ struct State {
     bool simDead = false;
     bool uncertain = false;
     SimulationIssue issue = SimulationIssue::none;
+    int issueObjectID = -1;
+    int issueObjectType = -1;
     bool injecting = false;
     bool deliveredDown = false;
     bool f6Down = false;
@@ -232,6 +234,8 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
     auto* player = layer->m_player1;
     auto* ghost = state.ghost;
     state.issue = SimulationIssue::none;
+    state.issueObjectID = -1;
+    state.issueObjectType = -1;
     if (!ghost || !player) { state.issue = SimulationIssue::missingPlayer; return dynamic::Verdict::unknown; }
     if (player->m_isDashing) { state.issue = SimulationIssue::dashing; return dynamic::Verdict::unknown; }
     if (state.tickDt <= 0) { state.issue = SimulationIssue::noTick; return dynamic::Verdict::unknown; }
@@ -340,9 +344,11 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
         });
         if (diagnostics) {
             auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - start).count();
-            log::info("[Dynamic Assist diagnostic] input={} mode={} window={} result={} delay={} attempts={} issue={} tick_dt={} elapsed_us={}",
+            log::info("[Dynamic Assist diagnostic] input={} mode={} window={} result={} delay={} attempts={} issue={} object_id={} object_type={} tick_dt={} elapsed_us={}",
                 down ? "press" : "release", static_cast<int>(context.vehicle), window, decisionName(decision.reason),
-                static_cast<unsigned>(decision.delay), decision.attempts, issueName(state.issue), state.tickDt, elapsed);
+                static_cast<unsigned>(decision.delay), decision.attempts, issueName(state.issue),
+                state.issue == SimulationIssue::object ? state.issueObjectID : -1,
+                state.issue == SimulationIssue::object ? state.issueObjectType : -1, state.tickDt, elapsed);
         }
         switch (decision.reason) {
             case dynamic::DecisionReason::safeNow:
@@ -353,7 +359,11 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
                 break;
             case dynamic::DecisionReason::unknownInitial:
             case dynamic::DecisionReason::unknownCandidate:
-                showResult(fmt::format("Prediccion incompleta: {}", issueName(state.issue)));
+                if (state.issue == SimulationIssue::object) {
+                    showResult(fmt::format("Objeto no compatible: ID {} tipo {}", state.issueObjectID, state.issueObjectType));
+                } else {
+                    showResult(fmt::format("Prediccion incompleta: {}", issueName(state.issue)));
+                }
                 break;
             case dynamic::DecisionReason::delayed:
                 showResult(fmt::format("Ajuste previsto: +{} ticks", static_cast<unsigned>(decision.delay)));
@@ -403,6 +413,8 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
                        object->getObjectRect().intersectsRect(player->getObjectRect())) {
                 state.uncertain = true;
                 state.issue = SimulationIssue::object;
+                state.issueObjectID = object->m_objectID;
+                state.issueObjectType = static_cast<int>(type);
             }
         }
         GJBaseGameLayer::collisionCheckObjects(player, &filtered, static_cast<int>(filtered.size()), dt);
