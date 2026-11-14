@@ -1,0 +1,27 @@
+{
+  "geode": "5.11.2",
+  "gd": {
+    "win": "2.2081"
+  },
+  "version": "v0.2.2",
+  "id": "dynamicassist.practice",
+  "name": "Dynamic Assist",
+  "developer": "Dynamic Assist",
+  "description": "Experimental predictive input assistance for standard game modes.",
+  "settings": {
+    "window": {
+      "type": "int",
+      "name": "Maximum delay (ticks)",
+      "description": "Maximum delay for an early input. Set to 0 for unmodified input.",
+      "default": 0,
+      "min": 0,
+      "max": 8
+    },
+    "diagnostics": {
+      "type": "bool",
+      "name": "Diagnostic log",
+      "description": "Record why clicks were or were not adjusted in the local Geode log. Turn off after testing.",
+      "default": false
+    }
+  }
+}
