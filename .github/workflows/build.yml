@@ -39,5 +39,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: DynamicAssist-Windows
-          path: ${{ steps.build.outputs.build-output }}/*.geode
+          path: build/dynamicassist.practice.geode
           if-no-files-found: error
