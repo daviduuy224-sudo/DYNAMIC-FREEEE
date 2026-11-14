@@ -59,7 +59,7 @@ constexpr BlockReason blockReason(PredictionContext c) {
     if (!c.enabled) return BlockReason::disabled;
     if (c.vehicle == Vehicle::unknown) return BlockReason::unknownVehicle;
     if (c.dead) return BlockReason::dead;
-    if (c.dashing) return BlockReason::dashing;
+    // Dash state and its private ring are restored from the native checkpoint.
     if (c.dual) return BlockReason::dual;
     if (c.platformer) return BlockReason::platformer;
     if (c.controlsLocked) return BlockReason::controlsLocked;

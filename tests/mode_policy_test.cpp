@@ -17,7 +17,7 @@ int main() {
         assert(blockReason({.vehicle=mode, .enabled=true}) == BlockReason::none);
         assert(blockReason({.vehicle=mode, .enabled=false}) == BlockReason::disabled);
         assert(blockReason({.vehicle=mode, .enabled=true, .dead=true}) == BlockReason::dead);
-        assert(blockReason({.vehicle=mode, .enabled=true, .dashing=true}) == BlockReason::dashing);
+        assert(blockReason({.vehicle=mode, .enabled=true, .dashing=true}) == BlockReason::none);
         assert(blockReason({.vehicle=mode, .enabled=true, .dual=true}) == BlockReason::dual);
         assert(blockReason({.vehicle=mode, .enabled=true, .platformer=true}) == BlockReason::platformer);
         assert(blockReason({.vehicle=mode, .enabled=true, .controlsLocked=true}) == BlockReason::controlsLocked);
@@ -31,20 +31,20 @@ int main() {
         assert(pendingInvalidated({.vehicle=mode, .enabled=true}, other));
         assert(!canPredict({.vehicle=mode, .enabled=false}));
         assert(!canPredict({.vehicle=mode, .enabled=true, .dead=true}));
-        assert(!canPredict({.vehicle=mode, .enabled=true, .dashing=true}));
+        assert(canPredict({.vehicle=mode, .enabled=true, .dashing=true}));
         assert(!canPredict({.vehicle=mode, .enabled=true, .dual=true}));
         assert(!canPredict({.vehicle=mode, .enabled=true, .platformer=true}));
         assert(!canPredict({.vehicle=mode, .enabled=true, .controlsLocked=true}));
         assert(canPredict({.vehicle=mode, .enabled=true, .onSlope=true}) == (mode == Vehicle::wave));
         assert(canPredict({.vehicle=mode, .enabled=true, .underForce=true}) == (mode == Vehicle::wave));
     }
-    // Preserve the original passthrough policy across combinations, including
+    // Check the policy across combinations with checkpoint-backed dash support, including
     // several simultaneous reasons and wave's slope/force exception.
     for (auto mode : expected) {
         for (unsigned bits = 0; bits < 256; ++bits) {
             PredictionContext c{mode, bool(bits & 1), bool(bits & 2), bool(bits & 4),
                 bool(bits & 8), bool(bits & 16), bool(bits & 32), bool(bits & 64), bool(bits & 128)};
-            bool original = c.enabled && !c.dead && !c.dashing && !c.dual &&
+            bool original = c.enabled && !c.dead && !c.dual &&
                 !c.platformer && !c.controlsLocked &&
                 ((!c.onSlope && !c.underForce) || c.vehicle == Vehicle::wave);
             assert(canPredict(c) == original);

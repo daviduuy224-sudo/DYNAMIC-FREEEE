@@ -7,14 +7,18 @@
 #include <Geode/modify/HardStreak.hpp>
 #include <Geode/modify/GameObject.hpp>
 #include <Geode/modify/EffectGameObject.hpp>
+#include <Geode/modify/RingObject.hpp>
 #include <Windows.h>
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include "controls.hpp"
 #include "collision_policy.hpp"
 #include "portal_policy.hpp"
+#include "interaction_policy.hpp"
 #include "timing.hpp"
 #include "input_queue.hpp"
 #include "mode_policy.hpp"
@@ -70,6 +74,12 @@ struct State {
     CCNode* holder = nullptr;
     PlayerObject* ghost = nullptr;
     dynamic::Vehicle ghostVehicle = dynamic::Vehicle::unknown;
+    struct ObjectCopy { Ref<GameObject> object; std::uint64_t generation = 0; };
+    std::unordered_map<GameObject*, ObjectCopy> copies;
+    std::unordered_set<GameObject*> scratchObjects;
+    std::unordered_set<GameObject*> activatedPortals;
+    std::uint64_t generation = 0;
+    Ref<PlayerCheckpoint> checkpoint;
     bool simulating = false;
     bool simDead = false;
     bool uncertain = false;
@@ -220,6 +230,65 @@ void ensureGhost(PlayLayer* layer, dynamic::Vehicle vehicle) {
     state.ghost = ghost;
     state.ghostVehicle = vehicle;
 }
+// Keep activation state on private objects. Native ring/pad physics may mark
+// an object activated, claim its touch, or animate it; none of those writes may
+// reach a real level object. Copies are reset once for each candidate.
+GameObject* interactionCopy(GameObject* original) {
+    auto& entry = state.copies[original];
+    if (!entry.object) entry.object = GameObject::createWithKey(original->m_objectID);
+    auto* copy = entry.object.data();
+    if (!copy) return nullptr;
+    state.scratchObjects.insert(copy);
+    if (entry.generation == state.generation) return copy;
+    entry.generation = state.generation;
+    copy->resetObject();
+    copy->setPosition(original->getPosition());
+    copy->setScaleX(original->getScaleX());
+    copy->setScaleY(original->getScaleY());
+    copy->setRotation(original->getRotation());
+    copy->m_uniqueID = original->m_uniqueID;
+    copy->m_objectType = original->m_objectType;
+    copy->m_isNoTouch = original->m_isNoTouch;
+    copy->m_isRingPoweredOn = original->m_isRingPoweredOn;
+    copy->m_isActivated = original->m_isActivated;
+    copy->m_hasNoEffects = true;
+    copy->m_hasNoParticles = true;
+    copy->setVisible(false);
+    if (auto* src = typeinfo_cast<EffectGameObject*>(original)) {
+        auto* dst = typeinfo_cast<EffectGameObject*>(copy);
+        if (!dst) return nullptr;
+        dst->m_gravityValue = src->m_gravityValue;
+        dst->m_gravityMod = src->m_gravityMod;
+        dst->m_isReverse = src->m_isReverse;
+        dst->m_targetGroupID = src->m_targetGroupID;
+    }
+    if (auto* src = typeinfo_cast<EnhancedGameObject*>(original)) {
+        auto* dst = typeinfo_cast<EnhancedGameObject*>(copy);
+        if (!dst) return nullptr;
+        dst->m_isMultiActivate = src->m_isMultiActivate;
+        dst->m_isNoMultiActivate = src->m_isNoMultiActivate;
+        dst->m_activated = src->m_activated;
+        dst->m_activatedByPlayer1 = src->m_activatedByPlayer1;
+        dst->m_activatedByPlayer2 = src->m_activatedByPlayer2;
+    }
+    if (auto* src = typeinfo_cast<RingObject*>(original)) {
+        auto* dst = typeinfo_cast<RingObject*>(copy);
+        if (!dst) return nullptr;
+        dst->m_claimTouch = src->m_claimTouch;
+        dst->m_isSpawnOnly = src->m_isSpawnOnly;
+    }
+    if (auto* src = typeinfo_cast<DashRingObject*>(original)) {
+        auto* dst = typeinfo_cast<DashRingObject*>(copy);
+        if (!dst) return nullptr;
+        dst->m_dashSpeed = src->m_dashSpeed;
+        dst->m_endBoost = src->m_endBoost;
+        dst->m_maxDuration = src->m_maxDuration;
+        dst->m_allowCollide = src->m_allowCollide;
+        dst->m_stopSlide = src->m_stopSlide;
+    }
+    return copy;
+}
+
 void clearLogs(PlayerObject* p) {
     if (p->m_collisionLogTop) p->m_collisionLogTop->removeAllObjects();
     if (p->m_collisionLogBottom) p->m_collisionLogBottom->removeAllObjects();
@@ -239,37 +308,52 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
     state.issueObjectID = -1;
     state.issueObjectType = -1;
     if (!ghost || !player) { state.issue = SimulationIssue::missingPlayer; return dynamic::Verdict::unknown; }
-    if (player->m_isDashing) { state.issue = SimulationIssue::dashing; return dynamic::Verdict::unknown; }
     if (state.tickDt <= 0) { state.issue = SimulationIssue::noTick; return dynamic::Verdict::unknown; }
     if (Clock::now() >= deadline) { state.issue = SimulationIssue::deadline; return dynamic::Verdict::unknown; }
     state.simulating = true;
     struct SimulationGuard {
-        ~SimulationGuard() { state.simulating = false; }
-    } simulationGuard;
+        PlayLayer* layer;
+        GJGameState saved;
+        ~SimulationGuard() {
+            layer->m_gameState = std::move(saved);
+            state.simulating = false;
+        }
+    } simulationGuard{layer, layer->m_gameState};
     state.simDead = false;
     state.uncertain = false;
-    // Undo candidate-only scale changes before restoring attributes.
-    ghost->togglePlayerScale(player->m_vehicleSize < 1.f, true);
-    ghost->copyAttributes(player);
-    ghost->setPosition(player->getPosition());
-    ghost->setRotation(player->getRotation());
-    ghost->m_yVelocity = player->m_yVelocity;
-    ghost->m_gravityMod = player->m_gravityMod;
-    ghost->m_playerSpeed = player->m_playerSpeed;
-    ghost->m_vehicleSize = player->m_vehicleSize;
-    ghost->m_gameModeChangedTime = player->m_gameModeChangedTime;
-    ghost->m_isDart = player->m_isDart;
-    ghost->m_isUpsideDown = player->m_isUpsideDown;
-    ghost->m_isGoingLeft = player->m_isGoingLeft;
-    ghost->m_isSideways = player->m_isSideways;
+    ++state.generation;
+    state.activatedPortals.clear();
+    // Use the game's practice checkpoint restore, including all vehicle flags,
+    // velocities, slope data, held input and ring bookkeeping. The old partial
+    // copy left state from the previous candidate on the hidden player.
+    if (!state.checkpoint) { state.issue = SimulationIssue::missingPlayer; return dynamic::Verdict::unknown; }
+    ghost->loadFromCheckpoint(state.checkpoint.data());
+    dynamic::copyGroundAndVelocityState(*ghost, *player);
+    if (player->m_isDashing && player->m_dashRing) {
+        ghost->m_dashRing = typeinfo_cast<DashRingObject*>(interactionCopy(player->m_dashRing));
+        if (!ghost->m_dashRing) { state.issue = SimulationIssue::dashing; return dynamic::Verdict::unknown; }
+    }
     ghost->m_isDead = false;
-    if (player->m_isDart) {
-        // Preserve the original wave behavior.
-        button(ghost, state.deliveredDown);
-    } else {
-        // copyAttributes already copies held-jump state. Releasing it here
-        // would also consume the next jump in modes such as UFO and swing.
-        dynamic::copyGroundAndVelocityState(*ghost, *player);
+    ghost->m_playEffects = false;
+    ghost->setVisible(false);
+    if (!ghost->m_touchingRings || ghost->m_touchingRings == player->m_touchingRings) {
+        state.issue = SimulationIssue::ring;
+        return dynamic::Verdict::unknown;
+    }
+    ghost->m_touchingRings->removeAllObjects();
+    // A click can arrive while already inside an orb. Rebuild these contacts
+    // with private objects before applying the first candidate input.
+    if (player->m_touchingRings) {
+        for (unsigned i = 0; i < player->m_touchingRings->count(); ++i) {
+            auto* ring = static_cast<RingObject*>(player->m_touchingRings->objectAtIndex(i));
+            if (!dynamic::nativeOrbOrPad(ring->m_objectType)) {
+                state.issue = SimulationIssue::ring;
+                return dynamic::Verdict::unknown;
+            }
+            auto* copy = typeinfo_cast<RingObject*>(interactionCopy(ring));
+            if (!copy) { state.issue = SimulationIssue::ring; return dynamic::Verdict::unknown; }
+            ghost->m_touchingRings->addObject(copy);
+        }
     }
     pauseTree(state.holder);
 
@@ -340,6 +424,12 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             state.deliveredDown = down;
             return GJBaseGameLayer::handleButton(down, buttonId, player1);
         }
+        state.checkpoint = PlayerCheckpoint::create();
+        if (!state.checkpoint) {
+            state.deliveredDown = down;
+            return GJBaseGameLayer::handleButton(down, buttonId, player1);
+        }
+        player->saveToCheckpoint(state.checkpoint.data());
         auto start = Clock::now();
         auto budget = std::clamp<int64_t>(Mod::get()->getSettingValue<int64_t>("budget"), 1, 33);
         auto deadline = start + std::chrono::milliseconds(budget);
@@ -412,7 +502,21 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
                 continue;
             }
             auto portal = dynamic::portalAction(type);
-            if (portal != dynamic::PortalAction::unsupported) {
+            auto vehicle = dynamic::portalVehicle(type);
+            auto speed = type == GameObjectType::Modifier ? dynamic::portalSpeed(object->m_objectID) : 0.f;
+            if (dynamic::nativeOrbOrPad(type)) {
+                auto* effect = typeinfo_cast<EffectGameObject*>(object);
+                if (effect && effect->m_targetGroupID != 0 &&
+                    object->getObjectRect().intersectsRect(player->getObjectRect())) {
+                    state.uncertain = true; state.issue = SimulationIssue::activation;
+                    return;
+                }
+                auto* copy = interactionCopy(object);
+                if (copy) filtered.push_back(copy);
+                else { state.uncertain = true; state.issue = SimulationIssue::object;
+                    state.issueObjectID = object->m_objectID; state.issueObjectType = static_cast<int>(type); }
+            } else if (portal != dynamic::PortalAction::unsupported ||
+                       vehicle != dynamic::Vehicle::unknown || speed > 0.f) {
                 // Preserve the engine's object order: resolve preceding solids
                 // before changing the candidate's gravity or hitbox size.
                 if (!filtered.empty()) {
@@ -424,7 +528,16 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
                 bool overlaps = object->m_objectRadius > 0.f
                     ? GJBaseGameLayer::playerCircleCollision(player, object)
                     : object->getObjectRect().intersectsRect(player->getObjectRect());
-                if (overlaps) dynamic::applyPortal(*player, portal);
+                if (overlaps && state.activatedPortals.insert(object).second) {
+                    dynamic::applyPortal(*player, portal);
+                    if (vehicle != dynamic::Vehicle::unknown) {
+                        dynamic::changeMode(player, type);
+                        // Only candidate game state is changed; the guard restores
+                        // it before the real input is delivered.
+                        GJBaseGameLayer::processCameraObject(object, player);
+                    }
+                    if (speed > 0.f) player->m_playerSpeed = speed;
+                }
             } else if (category == dynamic::CollisionCategory::geometry) {
                 filtered.push_back(object);
             } else if (category == dynamic::CollisionCategory::unsupported &&
@@ -437,11 +550,21 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
         }
         GJBaseGameLayer::collisionCheckObjects(player, &filtered, static_cast<int>(filtered.size()), dt);
     }
+    void flipGravity(PlayerObject* player, bool flip, bool noEffects) {
+        if (state.simulating) {
+            if (player == state.ghost) player->flipGravity(flip, true);
+            else { state.uncertain = true; state.issue = SimulationIssue::activation; }
+            return;
+        }
+        GJBaseGameLayer::flipGravity(player, flip, noEffects);
+    }
     void gameEventTriggered(GJGameEvent event, int material, int playerID) {
         if (!state.simulating) GJBaseGameLayer::gameEventTriggered(event, material, playerID);
     }
     bool canBeActivatedByPlayer(PlayerObject* player, EffectGameObject* object) {
-        if (state.simulating && player == state.ghost) {
+        if (state.simulating) {
+            if (player == state.ghost && state.scratchObjects.contains(object))
+                return GJBaseGameLayer::canBeActivatedByPlayer(player, object);
             state.uncertain = true;
             state.issue = SimulationIssue::activation;
             return false;
@@ -449,7 +572,9 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
         return GJBaseGameLayer::canBeActivatedByPlayer(player, object);
     }
     void playerTouchedRing(PlayerObject* player, RingObject* ring) {
-        if (state.simulating && player == state.ghost) { state.uncertain = true; state.issue = SimulationIssue::ring; return; }
+        if (state.simulating && (player != state.ghost || !state.scratchObjects.contains(ring))) {
+            state.uncertain = true; state.issue = SimulationIssue::ring; return;
+        }
         GJBaseGameLayer::playerTouchedRing(player, ring);
     }
 };
@@ -496,11 +621,25 @@ class $modify(DynamicPlayer, PlayerObject) {
         if (!state.simulating && layer && layer == state.layer && this == layer->m_player1)
             ++state.completedSteps;
     }
+    void ringJump(RingObject* ring, bool skipCheck) {
+        if (state.simulating && (this != state.ghost || !state.scratchObjects.contains(ring))) {
+            state.uncertain = true; state.issue = SimulationIssue::ring; return;
+        }
+        PlayerObject::ringJump(ring, skipCheck);
+    }
+    void playBumpEffect(int type, GameObject* object) {
+        if (!state.simulating) PlayerObject::playBumpEffect(type, object);
+    }
     void incrementJumps() {
         if (!state.simulating) PlayerObject::incrementJumps();
     }
     void playSpiderDashEffect(CCPoint from, CCPoint to) {
         if (!state.simulating) PlayerObject::playSpiderDashEffect(from, to);
+    }
+};
+class $modify(DynamicRing, RingObject) {
+    void triggerActivated(float x) {
+        if (!state.simulating) RingObject::triggerActivated(x);
     }
 };
 class $modify(DynamicStreak, HardStreak) {
@@ -512,6 +651,11 @@ class $modify(DynamicObject, GameObject) {
 class $modify(DynamicEffect, EffectGameObject) {
     void triggerObject(GJBaseGameLayer* layer, int id, gd::vector<int> const* keys) {
         if (!state.simulating) EffectGameObject::triggerObject(layer, id, keys);
+        else if (this->m_targetGroupID != 0) {
+            // A custom group effect needs future world simulation as well.
+            state.uncertain = true;
+            state.issue = SimulationIssue::activation;
+        }
     }
 };
 class $modify(DynamicPlayLayer, PlayLayer) {
@@ -564,6 +708,10 @@ class $modify(DynamicPlayLayer, PlayLayer) {
         state.ghost = nullptr;
         state.holder = nullptr;
         state.ghostVehicle = dynamic::Vehicle::unknown;
+        state.checkpoint = nullptr;
+        state.copies.clear();
+        state.scratchObjects.clear();
+        state.activatedPortals.clear();
         discardPending("quit");
         PlayLayer::onQuit();
     }
