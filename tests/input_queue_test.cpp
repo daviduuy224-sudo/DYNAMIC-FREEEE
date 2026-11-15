@@ -1,6 +1,18 @@
 #include "../src/input_queue.hpp"
 #include <cassert>
 int main() {
+    dynamic::InputQueue routed;
+    routed.addAfterSteps(true, 10, 3, false);
+    assert(!routed.pop(13));
+    auto secondPress = routed.pop(14);
+    assert(secondPress && secondPress->down && !secondPress->player1);
+    routed.addAfterSteps(false, 14, 4, false);
+    auto interrupted = routed.pop(15, true);
+    assert(interrupted && !interrupted->down && !interrupted->player1);
+    routed.addAfterSteps(true, 15, 1);
+    auto primary = routed.pop(17);
+    assert(primary && primary->down && primary->player1);
+
     // A one-step prediction after tick 10 must preserve input for step 11
     // and apply the new input before step 12.
     dynamic::InputQueue timeline;

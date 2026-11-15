@@ -16,7 +16,19 @@ Prototipo de asistencia de entrada para Geometry Dash 2.2081 en Windows con Geod
 
 <!-- coderabbit-ai-generated-section:v1:3a4e1c75c4e958c7bb51c9672c7a615057c139716b2ea3a062018c325e4e6ddb -->
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:3da4ec642a79be7aaa438ef98590eae0f978bd00b64bb4f1ab15904d7b104516 -->
+
+## Cambios de la versión 0.5.2
+
+Se amplía el dual con gravedad independiente a controles separados: cada entrada y su retraso conservan el jugador destinatario. El otro jugador se simula manteniendo sus botones actuales, sin recibir el clic ajeno. Una nueva entrada de cualquiera de los dos entrega primero la pendiente para conservar el orden. El diagnóstico incluye el jugador y el modo de controles. Falta verificarlo dentro del juego.
+
+La gravedad enlazada y la simulación futura de Move/Toggle/Spawn siguen pendientes. El diseño actual no tiene dos jugadores ocultos que avancen juntos ni una copia del estado completo de objetos, grupos y comandos futuros. No se habilitan esas rutas mediante la retirada de protecciones.
+
 ## Cambios de la versión 0.5.1
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 - Predicción limitada de dual de un botón con gravedad independiente (`Unlink Dual Gravity`). Se comprueban los dos jugadores para el mismo retraso. Gravedad enlazada, controles separados de dos jugadores, dash, orbes en contacto y futuras interacciones de portales/orbes en dual siguen sin asistirse. Los candidatos incompletos conservan la entrada original.
 - Los triggers exclusivamente de color 29, 30, 105, 744, 899, 900 y 915 se omiten en la simulación física. Move, Toggle, Spawn y demás triggers no se consideran decorativos; sigue pendiente simular su efecto futuro en el nivel.

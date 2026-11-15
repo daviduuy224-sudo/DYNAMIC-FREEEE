@@ -108,6 +108,7 @@ struct State {
     float tickDt = 0;
     float pendingTickDt = 0;
     bool pendingDual = false;
+    bool pendingPlayer1 = true;
     dynamic::Vehicle pendingSecondVehicle = dynamic::Vehicle::unknown;
     std::uint64_t tick = 0;
     dynamic::InputQueue pending;
@@ -134,9 +135,9 @@ void showResult(std::string result) {
     state.lastResult = std::move(result);
     updateControls();
 }
-void inject(PlayLayer* layer, bool down) {
+void inject(PlayLayer* layer, bool down, bool player1) {
     state.injecting = true;
-    layer->handleButton(down, 1, true);
+    layer->handleButton(down, 1, player1);
     state.injecting = false;
     state.deliveredDown = down;
 }
@@ -144,7 +145,7 @@ void forwardQueued(PlayLayer* layer, dynamic::QueuedInput const& event, char con
     state.stats.delivered(state.pendingStartStep, state.completedSteps);
     auto actualDelay = state.completedSteps >= state.pendingStartStep
         ? state.completedSteps - state.pendingStartStep : 0;
-    inject(layer, event.down);
+    inject(layer, event.down, event.player1);
     state.lastResult = fmt::format("Entrada aplicada: +{} ticks", actualDelay);
     updateControls();
     if (Mod::get()->getSettingValue<bool>("diagnostics")) {
@@ -203,7 +204,7 @@ dynamic::PredictionContext predictionContext(PlayerObject* p, PlayLayer* layer, 
         p->m_isDart, p->m_isRobot, p->m_isSpider, p->m_isSwing});
     auto* second = layer->m_player2;
     bool independentDual = layer->m_gameState.m_unlinkDualGravity &&
-        layer->m_levelSettings && !layer->m_levelSettings->m_twoPlayerMode && second &&
+        layer->m_levelSettings && second &&
         !p->m_isDashing && !second->m_isDashing && !second->m_isDead &&
         !second->m_controlsDisabled && !second->m_inputsLocked && !second->m_isLocked;
     return {vehicle, enabled, p->m_isDead, p->m_isDashing,
@@ -310,7 +311,7 @@ void button(PlayerObject* p, bool down) {
     else p->releaseButton(PlayerButton::Jump);
 }
 
-dynamic::Verdict simulate(PlayLayer* layer, PlayerObject* player, PlayerCheckpoint* checkpoint, bool down, unsigned delay, unsigned horizon,
+dynamic::Verdict simulate(PlayLayer* layer, PlayerObject* player, PlayerCheckpoint* checkpoint, bool down, bool applyInput, unsigned delay, unsigned horizon,
                           Clock::time_point deadline) {
     auto* ghost = state.ghost;
     state.issue = SimulationIssue::none;
@@ -391,7 +392,7 @@ dynamic::Verdict simulate(PlayLayer* layer, PlayerObject* player, PlayerCheckpoi
         return true;
     };
     return dynamic::runPredictionSteps(horizon + delay, expired, [&](unsigned i) {
-        if (i == delay) button(ghost, down);
+        if (applyInput && i == delay) button(ghost, down);
         ghost->update(state.tickDt);
         clearLogs(ghost);
         if (!state.simDead && !state.uncertain) {
@@ -430,14 +431,17 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             return GJBaseGameLayer::handleButton(down, buttonId, player1);
         }
         const bool diagnostics = Mod::get()->getSettingValue<bool>("diagnostics");
-        if (buttonId != 1 || !player1) {
+        bool separateControls = layer->m_gameState.m_isDualMode && layer->m_levelSettings &&
+            layer->m_levelSettings->m_twoPlayerMode;
+        if (buttonId != 1 || (!player1 && !separateControls)) {
             // A secondary input must not overtake an already queued click.
             if (buttonId == 1 && !state.pending.empty()) flush(layer);
             if (diagnostics) log::info("[Dynamic Assist diagnostic] ignored button={} player1={}", buttonId, player1);
             return GJBaseGameLayer::handleButton(down, buttonId, player1);
         }
         auto window = dynamic::clampWindow(Mod::get()->getSettingValue<int64_t>("window"));
-        auto* player = layer->m_player1;
+        auto* player = player1 ? layer->m_player1 : layer->m_player2;
+        auto* otherPlayer = player1 ? layer->m_player2 : layer->m_player1;
         if (!player) {
             if (diagnostics) log::info("[Dynamic Assist diagnostic] input ignored: missing-player");
             flush(layer);
@@ -494,7 +498,7 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
         dynamic::preparePredictionCheckpoint(*state.checkpoint.data());
         Ref<PlayerCheckpoint> secondCheckpoint;
         if (context.dual) {
-            auto secondContext = predictionContext(layer->m_player2, layer, true);
+            auto secondContext = predictionContext(otherPlayer, layer, true);
             if (!dynamic::canPredict(secondContext)) {
                 state.deliveredDown = down;
                 return GJBaseGameLayer::handleButton(down, buttonId, player1);
@@ -504,12 +508,12 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
                 state.deliveredDown = down;
                 return GJBaseGameLayer::handleButton(down, buttonId, player1);
             }
-            layer->m_player2->saveToCheckpoint(secondCheckpoint.data());
+            otherPlayer->saveToCheckpoint(secondCheckpoint.data());
         }
         auto decision = dynamic::chooseDelay(static_cast<std::uint8_t>(window), [&](std::uint8_t delay) {
-            auto verdict = simulate(layer, player, state.checkpoint.data(), down, delay, horizon, deadline);
+            auto verdict = simulate(layer, player, state.checkpoint.data(), down, true, delay, horizon, deadline);
             if (verdict == dynamic::Verdict::safe && context.dual) {
-                verdict = simulate(layer, layer->m_player2, secondCheckpoint.data(), down, delay, horizon, deadline);
+                verdict = simulate(layer, otherPlayer, secondCheckpoint.data(), down, !separateControls, delay, horizon, deadline);
             }
             // Include native setup and scoped cleanup in the same deadline.
             if (Clock::now() >= deadline) {
@@ -520,8 +524,8 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
         });
         if (diagnostics) {
             auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - start).count();
-            log::info("[Dynamic Assist diagnostic] input={} mode={} window={} result={} delay={} attempts={} issue={} object_id={} object_type={} tick_dt={} elapsed_us={} horizon={} budget_ms={}",
-                down ? "press" : "release", static_cast<int>(context.vehicle), window, decisionName(decision.reason),
+            log::info("[Dynamic Assist diagnostic] input={} player1={} separate_controls={} mode={} window={} result={} delay={} attempts={} issue={} object_id={} object_type={} tick_dt={} elapsed_us={} horizon={} budget_ms={}",
+                down ? "press" : "release", player1, separateControls, static_cast<int>(context.vehicle), window, decisionName(decision.reason),
                 static_cast<unsigned>(decision.delay), decision.attempts, issueName(state.issue),
                 state.issueObjectID, state.issueObjectType, state.tickDt, elapsed, horizon, budget);
         }
@@ -550,12 +554,13 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
         if (decision.delay) {
             state.pendingStartStep = state.completedSteps;
             state.pendingDelay = decision.delay;
-            state.pending.addAfterSteps(down, state.tick, decision.delay);
+            state.pending.addAfterSteps(down, state.tick, decision.delay, player1);
             state.pendingVehicle = context.vehicle;
             state.pendingTickDt = state.tickDt;
             state.pendingDual = context.dual;
+            state.pendingPlayer1 = player1;
             state.pendingSecondVehicle = context.dual
-                ? predictionContext(layer->m_player2, layer, true).vehicle : dynamic::Vehicle::unknown;
+                ? predictionContext(otherPlayer, layer, true).vehicle : dynamic::Vehicle::unknown;
             log::info("Dynamic Assist: planned delay {} tick(s)", static_cast<unsigned>(decision.delay));
             return;
         }
@@ -716,11 +721,13 @@ class $modify(DynamicPlayer, PlayerObject) {
             if (state.displayedWindow != displayedWindow ||
                 state.displayedControls != Mod::get()->getSettingValue<bool>("show-controls")) updateControls();
             auto window = dynamic::clampWindow(Mod::get()->getSettingValue<int64_t>("window"));
-            auto context = predictionContext(this, layer, window > 0);
+            auto* pendingPlayer = state.pendingPlayer1 ? layer->m_player1 : layer->m_player2;
+            auto* pendingOther = state.pendingPlayer1 ? layer->m_player2 : layer->m_player1;
+            auto context = predictionContext(pendingPlayer, layer, window > 0);
             if (!state.pending.empty() &&
                 (!dynamic::compatibleTickDuration(state.pendingTickDt, state.tickDt) ||
                  context.dual != state.pendingDual ||
-                 (context.dual && predictionContext(layer->m_player2, layer, true).vehicle != state.pendingSecondVehicle) ||
+                 (context.dual && predictionContext(pendingOther, layer, true).vehicle != state.pendingSecondVehicle) ||
                  dynamic::pendingInvalidated(context, state.pendingVehicle) ||
                  dynamic::pendingExceedsWindow(state.pendingDelay, window)))
                 flush(layer);
