@@ -49,6 +49,7 @@ struct PredictionContext {
     bool controlsLocked = false;
     bool onSlope = false;
     bool underForce = false;
+    bool independentDual = false;
 };
 
 enum class BlockReason { none, disabled, unknownVehicle, dead, dashing, dual, platformer, controlsLocked, slope, force };
@@ -59,7 +60,7 @@ constexpr BlockReason blockReason(PredictionContext c) {
     if (c.vehicle == Vehicle::unknown) return BlockReason::unknownVehicle;
     if (c.dead) return BlockReason::dead;
     // Dash state and its private ring are restored from the native checkpoint.
-    if (c.dual) return BlockReason::dual;
+    if (c.dual && !c.independentDual) return BlockReason::dual;
     if (c.platformer) return BlockReason::platformer;
     if (c.controlsLocked) return BlockReason::controlsLocked;
     // Existing slope/force state is restored by the native checkpoint.

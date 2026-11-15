@@ -79,6 +79,17 @@ int main() {
         ++steps; return Verdict::safe;
     }) == Verdict::safe);
     assert(steps == 320);
+    // A candidate safe for player one must still fail if player two dies.
+    auto dual = chooseDelay(4, [](std::uint8_t tick) {
+        auto first = tick >= 1 ? Verdict::safe : Verdict::unsafe;
+        if (first != Verdict::safe) return first;
+        return tick >= 3 ? Verdict::safe : Verdict::unsafe;
+    });
+    assert(dual.predictionComplete && dual.delay == 3);
+    auto dualUnknown = chooseDelay(4, [](std::uint8_t tick) {
+        return tick == 0 ? Verdict::unsafe : Verdict::unknown;
+    });
+    assert(!dualUnknown.predictionComplete && dualUnknown.delay == 0);
     auto lastTick = chooseDelay(255, [](std::uint8_t tick) {
         return tick == 255 ? Verdict::safe : Verdict::unsafe;
     });

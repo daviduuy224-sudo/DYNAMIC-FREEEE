@@ -14,6 +14,8 @@ int main() {
         auto mode = vehicleFor(flags[i]);
         assert(mode == expected[i]);
         assert(canPredict({.vehicle=mode, .enabled=true}));
+        assert(canPredict({.vehicle=mode, .enabled=true, .dual=true, .independentDual=true}));
+        assert(!canPredict({.vehicle=mode, .enabled=true, .dual=true, .controlsLocked=true, .independentDual=true}));
         assert(blockReason({.vehicle=mode, .enabled=true}) == BlockReason::none);
         assert(blockReason({.vehicle=mode, .enabled=false}) == BlockReason::disabled);
         assert(blockReason({.vehicle=mode, .enabled=true, .dead=true}) == BlockReason::dead);

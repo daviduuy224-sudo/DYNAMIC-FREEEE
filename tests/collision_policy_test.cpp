@@ -1,5 +1,6 @@
 #include "../src/collision_policy.hpp"
 #include <cassert>
+#include <initializer_list>
 
 // Values and names from Geode 5.11.2's GameObjectType. Production code
 // instantiates the same policy with the actual SDK enum.
@@ -8,6 +9,9 @@ enum class ObjectType {
 };
 
 int main() {
+    for (int id : {29, 30, 105, 744, 899, 900, 915}) assert(dynamic::colorOnlyTrigger(id));
+    for (int id : {901, 1049, 1006, 1007, 1268, 1817, 2067, -1, 99999})
+        assert(!dynamic::colorOnlyTrigger(id));
     using dynamic::CollisionCategory;
     using dynamic::collisionCategory;
     assert(collisionCategory(ObjectType::Solid) == CollisionCategory::geometry);

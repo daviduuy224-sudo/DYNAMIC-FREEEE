@@ -12,7 +12,20 @@ Prototipo de asistencia de entrada para Geometry Dash 2.2081 en Windows con Geod
 
 <!-- coderabbit-ai-generated-section:v1:d1efb20accf7e296523eca28dab82c5b676051e85559dffb989d29cc3fea66b9 -->
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:3a4e1c75c4e958c7bb51c9672c7a615057c139716b2ea3a062018c325e4e6ddb -->
+
+## Cambios de la versión 0.5.1
+
+- Predicción limitada de dual de un botón con gravedad independiente (`Unlink Dual Gravity`). Se comprueban los dos jugadores para el mismo retraso. Gravedad enlazada, controles separados de dos jugadores, dash, orbes en contacto y futuras interacciones de portales/orbes en dual siguen sin asistirse. Los candidatos incompletos conservan la entrada original.
+- Los triggers exclusivamente de color 29, 30, 105, 744, 899, 900 y 915 se omiten en la simulación física. Move, Toggle, Spawn y demás triggers no se consideran decorativos; sigue pendiente simular su efecto futuro en el nivel.
+- Al entrar o salir de dual se entrega primero la entrada pendiente. Una entrada del segundo jugador tampoco puede adelantarse a una pendiente. Se conserva el aislamiento de efectos y temporizadores.
+- Esta ampliación cambia el bloqueo total de dual de las versiones anteriores. No hay prueba dentro de Geometry Dash ni garantía de ausencia de cierres. Las limitaciones generales de dual descritas abajo se reducen únicamente al caso independiente indicado aquí.
+
 ## Cambios de la versión 0.5.0
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 - **Maximum delay** admite hasta 64 ticks (antes 16). F6 y los controles del nivel alcanzan el nuevo límite.
 - **Prediction lookahead** permite simular de 32 a 256 pasos después de cada entrada candidata. El valor inicial sigue siendo 32. Supone que mantienes esa entrada durante la ventana; mirar más lejos no garantiza más correcciones.
