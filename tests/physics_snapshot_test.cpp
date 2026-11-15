@@ -18,6 +18,7 @@ struct Player {
     int m_stateBoostY = 0, m_stateForce = 0, m_stateForceVector = 0, m_affectedByForces = 0;
     int m_controlsDisabled = 0, m_inputsLocked = 0;
     std::map<int, bool> m_holdingButtons;
+    bool m_enable22Changes = false, m_enableImpulseFix = false, m_gv0123 = false;
     int modeMarker = 9; // mode is selected separately by the game
 };
 
@@ -33,6 +34,7 @@ int main() {
     real.m_maybeIsBoosted = 1;
     real.m_accelerationOrSpeed = 5;
     real.m_holdingButtons[1] = true;
+    real.m_enable22Changes = real.m_enableImpulseFix = real.m_gv0123 = true;
     ghost.modeMarker = 17;
     dynamic::copyGroundAndVelocityState(ghost, real);
     assert(ghost.m_isOnGround && ghost.m_jumpBuffered);
@@ -40,6 +42,7 @@ int main() {
     assert(ghost.m_totalTime == 12 && ghost.m_gameModeChangedTime == 3 && ghost.m_holdingButtons.at(1));
     assert(ghost.m_maybeIsBoosted == 1 && ghost.m_accelerationOrSpeed == 5);
     assert(ghost.modeMarker == 17);
+    assert(ghost.m_enable22Changes && ghost.m_enableImpulseFix && ghost.m_gv0123);
 
     // A second candidate must replace stale data from the first simulation.
     real = Player{};
@@ -48,4 +51,5 @@ int main() {
     assert(ghost.m_gameModeChangedTime == 0);
     assert(ghost.m_holdingButtons.empty() && ghost.modeMarker == 17);
     assert(!ghost.m_maybeIsBoosted && ghost.m_accelerationOrSpeed == 0);
+    assert(!ghost.m_enable22Changes && !ghost.m_enableImpulseFix && !ghost.m_gv0123);
 }

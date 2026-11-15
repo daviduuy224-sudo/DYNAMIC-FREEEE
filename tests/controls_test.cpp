@@ -4,16 +4,23 @@
 
 int main() {
     using namespace dynamic;
-    assert(clampWindow(-2) == 0 && clampWindow(99) == 16);
-    assert(nextWindow(8) == 9 && nextWindow(15) == 16 && nextWindow(16) == 0);
+    assert(clampWindow(-2) == 0 && clampWindow(99) == 64);
+    assert(nextWindow(8) == 9 && nextWindow(15) == 16 && nextWindow(16) == 17 && nextWindow(63) == 64 && nextWindow(64) == 0);
     assert(toggleWindow(8, 8) == 0);
     assert(toggleWindow(0, 12) == 12 && toggleWindow(0, 0) == 1);
-    assert(toggleWindow(0, 100) == 16);
+    assert(toggleWindow(0, 100) == 64);
     assert(!pendingExceedsWindow(12, 16));
     assert(!pendingExceedsWindow(12, 12));
     assert(pendingExceedsWindow(12, 11));
     assert(pendingExceedsWindow(1, 0));
 
+    assert(clampHorizon(-1) == 32 && clampHorizon(128) == 128 && clampHorizon(999) == 256);
+    assert(clampBudget(-1) == 1 && clampBudget(50) == 50 && clampBudget(999) == 66);
+    InputQueue extended;
+    extended.addAfterSteps(true, 100, 64);
+    assert(!extended.pop(164));
+    assert(extended.pop(165)->down);
+    assert(!pendingExceedsWindow(64, 64) && pendingExceedsWindow(64, 63));
     AttemptStats attempt;
     // An immediate flush has not delayed an input and must not count.
     attempt.delivered(10, 10);

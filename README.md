@@ -8,7 +8,21 @@
 
 Prototipo de asistencia de entrada para Geometry Dash 2.2081 en Windows con Geode 5.11.2. No se ha probado dentro del juego. No se puede garantizar que sea indetectable.
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:d1efb20accf7e296523eca28dab82c5b676051e85559dffb989d29cc3fea66b9 -->
+
+## Cambios de la versión 0.5.0
+
+- **Maximum delay** admite hasta 64 ticks (antes 16). F6 y los controles del nivel alcanzan el nuevo límite.
+- **Prediction lookahead** permite simular de 32 a 256 pasos después de cada entrada candidata. El valor inicial sigue siendo 32. Supone que mantienes esa entrada durante la ventana; mirar más lejos no garantiza más correcciones.
+- **Prediction time budget** admite hasta 66 ms. Su valor inicial sigue siendo 12 ms; el límite superior puede producir pausas visibles en cada clic. Un margen grande necesita más candidatos y puede agotar el presupuesto.
+- El jugador oculto conserva las opciones de física `m_enable22Changes`, `m_enableImpulseFix` y `m_gv0123` del jugador real, que no están en el checkpoint. Se reutiliza entre vehículos mediante la restauración nativa, reduciendo construcciones y destrucciones. La limpieza recorre solo las copias usadas en el candidato actual.
+- El diagnóstico incluye el horizonte y el presupuesto usados. Se conservan los bloqueos de dual, plataforma e interacciones desconocidas. No se garantiza precisión perfecta ni se ha probado esta versión dentro de Geometry Dash.
+
 ## Cambios de la versión 0.4.1
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 - Corrección del aislamiento de las estelas: los checkpoints usados para predecir desactivan `GhostType` y los efectos visuales. Los temporizadores de estelas creadas para la predicción se identifican durante toda su vida, incluso después de retirar el jugador oculto. Esto aborda una vía compatible con los dos cierres recibidos en `GhostTrailEffect::trailSnapshot`; falta confirmar el resultado dentro del juego.
 - Se eliminan callbacks y acciones de los nodos privados al terminar cada candidato, también si muere, encuentra una interacción desconocida o agota el tiempo. El jugador real conserva sus efectos.
@@ -30,7 +44,13 @@ Coloca `dynamicassist.practice.geode` en la carpeta `Geometry Dash/geode/mods` y
 
 <!-- coderabbit-ai-generated-section:v1:e6c194d601f543857de41fed979ec786d01c1acdd3e7e0c4810907afb1a8f097 -->
 
-- Empieza desactivado. Los botones **ON/OFF**, **-** y **+** dentro del nivel activan o desactivan la asistencia y ajustan el margen de 0 a 16 ticks. F6 recorre esos valores; F7 alterna entre 0 y el último margen seleccionado (1 si aún no hay uno). También puedes cambiar el margen en los ajustes del mod de Geode.
+- Empieza desactivado. Los botones **ON/OFF**, **-** y **+** dentro del nivel activan o desactivan la asistencia y ajustan el margen <!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:b776099bb648d6db213736f004ecaba2eace9d858dde084e408538133b1619be -->
+
+de 0 a 64 ticks
+
+<!-- /coderabbit-ai-generated:v1 -->. F6 recorre esos valores; F7 alterna entre 0 y el último margen seleccionado (1 si aún no hay uno). También puedes cambiar el margen en los ajustes del mod de Geode.
 <!-- coderabbit-ai-generated:v1 -->
 
 <!-- coderabbit-ai-generated-section:v1:b2cdadc253c6f1e31fd363f0b3f342d78bb24a792106722c443d09c85b277bf6 -->
@@ -63,7 +83,13 @@ Coloca `dynamicassist.practice.geode` en la carpeta `Geometry Dash/geode/mods` y
 
 <!-- coderabbit-ai-generated-section:v1:81d26a16339d14f979dc1e595068d1b1ba6ccf68332d1b7dcd64f1af9880b803 -->
 
-- **Prediction time budget** ajusta el tiempo máximo dedicado a cada entrada entre 1 y 33 ms (12 ms por defecto). Un presupuesto mayor permite evaluar más candidatos, pero puede reducir los FPS y no garantiza que la simulación termine. El impacto depende del equipo y del nivel.
+- **Prediction time budget** ajusta el tiempo máximo dedicado a cada entrada <!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:94ecf95c87b156f2f84fc9d1fe7938e410556010aef3ddbbcfe458ae23293564 -->
+
+entre 1 y 66 ms (12 ms por defecto)
+
+<!-- /coderabbit-ai-generated:v1 -->. Un presupuesto mayor permite evaluar más candidatos, pero puede reducir los FPS y no garantiza que la simulación termine. El impacto depende del equipo y del nivel.
 
 <!-- /coderabbit-ai-generated:v1 -->
 

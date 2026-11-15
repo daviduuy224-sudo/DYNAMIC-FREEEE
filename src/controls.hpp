@@ -4,7 +4,16 @@
 #include <cstdint>
 
 namespace dynamic {
-inline constexpr std::int64_t maxWindow = 16;
+inline constexpr std::int64_t maxWindow = 64;
+
+inline constexpr std::int64_t maxHorizon = 256;
+inline constexpr std::int64_t maxBudget = 66;
+constexpr unsigned clampHorizon(std::int64_t value) {
+    return static_cast<unsigned>(std::clamp(value, std::int64_t{32}, maxHorizon));
+}
+constexpr std::int64_t clampBudget(std::int64_t value) {
+    return std::clamp(value, std::int64_t{1}, maxBudget);
+}
 
 constexpr std::int64_t clampWindow(std::int64_t value) {
     return std::clamp(value, std::int64_t{0}, maxWindow);

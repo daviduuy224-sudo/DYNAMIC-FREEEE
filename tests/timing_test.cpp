@@ -70,6 +70,15 @@ int main() {
         return tick == 12 ? Verdict::safe : Verdict::unsafe;
     });
     assert(aboveEight.delay == 12 && aboveEight.attempts == 13 && aboveEight.predictionComplete);
+    auto extended = chooseDelay(64, [](std::uint8_t tick) {
+        return tick == 64 ? Verdict::safe : Verdict::unsafe;
+    });
+    assert(extended.delay == 64 && extended.attempts == 65 && extended.predictionComplete);
+    unsigned steps = 0;
+    assert(runPredictionSteps(256 + 64, never, [&](unsigned) {
+        ++steps; return Verdict::safe;
+    }) == Verdict::safe);
+    assert(steps == 320);
     auto lastTick = chooseDelay(255, [](std::uint8_t tick) {
         return tick == 255 ? Verdict::safe : Verdict::unsafe;
     });

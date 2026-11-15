@@ -16,6 +16,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 #include "controls.hpp"
 #include "collision_policy.hpp"
 #include "portal_policy.hpp"
@@ -76,10 +77,10 @@ struct State {
     PlayLayer* layer = nullptr;
     CCNode* holder = nullptr;
     PlayerObject* ghost = nullptr;
-    dynamic::Vehicle ghostVehicle = dynamic::Vehicle::unknown;
     struct ObjectCopy { Ref<GameObject> object; std::uint64_t generation = 0; };
     std::unordered_map<GameObject*, ObjectCopy> copies;
     std::unordered_set<GameObject*> scratchObjects;
+    std::vector<GameObject*> activeCopies;
     std::unordered_set<GameObject*> activatedPortals;
     std::uint64_t generation = 0;
     Ref<PlayerCheckpoint> checkpoint;
@@ -204,17 +205,10 @@ dynamic::PredictionContext predictionContext(PlayerObject* p, PlayLayer* layer, 
         p->m_isOnSlope || p->m_wasOnSlope,
         dynamic::hasActiveForce(p->m_stateForce, p->m_affectedByForces)};
 }
-void ensureGhost(PlayLayer* layer, dynamic::Vehicle vehicle) {
-    if (!layer || !layer->m_objectLayer) return;
-    if (state.ghost && state.ghostVehicle == vehicle) return;
-    if (state.holder) {
-        auto* oldHolder = state.holder;
-        state.ghost = nullptr;
-        state.holder = nullptr;
-        state.ghostVehicle = dynamic::Vehicle::unknown;
-        dynamic::stopPredictionNode<CCNode>(oldHolder);
-        oldHolder->removeFromParent();
-    }
+void ensureGhost(PlayLayer* layer) {
+    if (!layer || !layer->m_objectLayer || state.ghost) return;
+    // Native checkpoint restoration already restores the vehicle for every
+    // candidate. Keep one hidden player across real mode changes as well.
     auto* holder = CCLayer::create();
     if (!holder) return;
     holder->setVisible(false);
@@ -234,7 +228,6 @@ void ensureGhost(PlayLayer* layer, dynamic::Vehicle vehicle) {
     dynamic::stopPredictionNode<CCNode>(holder);
     state.holder = holder;
     state.ghost = ghost;
-    state.ghostVehicle = vehicle;
 }
 // Keep activation state on private objects. Native ring/pad physics may mark
 // an object activated, claim its touch, or animate it; none of those writes may
@@ -247,6 +240,7 @@ GameObject* interactionCopy(GameObject* original) {
     state.scratchObjects.insert(copy);
     if (entry.generation == state.generation) return copy;
     dynamic::stopPredictionNode<CCNode>(copy);
+    state.activeCopies.push_back(copy);
     copy->resetObject();
     copy->setPosition(original->getPosition());
     copy->setScaleX(original->getScaleX());
@@ -309,7 +303,7 @@ void button(PlayerObject* p, bool down) {
     else p->releaseButton(PlayerButton::Jump);
 }
 
-dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
+dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay, unsigned horizon,
                           Clock::time_point deadline) {
     auto* player = layer->m_player1;
     auto* ghost = state.ghost;
@@ -333,10 +327,9 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
     // returns. Stop it on every exit, while the simulation flag is still set.
     dynamic::PredictionScope simulationGuard(state.simulating, [] {
         dynamic::stopPredictionNode<CCNode>(state.holder);
-        for (auto const& [original, entry] : state.copies) {
-            if (entry.generation == state.generation)
-                dynamic::stopPredictionNode<CCNode>(entry.object.data());
-        }
+        for (auto* copy : state.activeCopies)
+            dynamic::stopPredictionNode<CCNode>(copy);
+        state.activeCopies.clear();
     });
     state.simDead = false;
     state.uncertain = false;
@@ -380,7 +373,6 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
     }
     dynamic::stopPredictionNode<CCNode>(state.holder);
 
-    constexpr unsigned horizon = 32;
     auto expired = [&] {
         if (Clock::now() < deadline) return false;
         state.issue = SimulationIssue::deadline;
@@ -444,9 +436,10 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             return GJBaseGameLayer::handleButton(down, buttonId, player1);
         }
         auto start = Clock::now();
-        auto budget = std::clamp<int64_t>(Mod::get()->getSettingValue<int64_t>("budget"), 1, 33);
+        auto budget = dynamic::clampBudget(Mod::get()->getSettingValue<int64_t>("budget"));
         auto deadline = start + std::chrono::milliseconds(budget);
-        ensureGhost(layer, context.vehicle);
+        auto horizon = dynamic::clampHorizon(Mod::get()->getSettingValue<int64_t>("horizon"));
+        ensureGhost(layer);
         if (!state.ghost) {
             if (diagnostics) log::info("[Dynamic Assist diagnostic] input ignored: ghost-unavailable");
             flush(layer);
@@ -472,7 +465,7 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
         player->saveToCheckpoint(state.checkpoint.data());
         dynamic::preparePredictionCheckpoint(*state.checkpoint.data());
         auto decision = dynamic::chooseDelay(static_cast<std::uint8_t>(window), [&](std::uint8_t delay) {
-            auto verdict = simulate(layer, down, delay, deadline);
+            auto verdict = simulate(layer, down, delay, horizon, deadline);
             // Include native setup and scoped cleanup in the same deadline.
             if (Clock::now() >= deadline) {
                 state.issue = SimulationIssue::deadline;
@@ -482,10 +475,10 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
         });
         if (diagnostics) {
             auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - start).count();
-            log::info("[Dynamic Assist diagnostic] input={} mode={} window={} result={} delay={} attempts={} issue={} object_id={} object_type={} tick_dt={} elapsed_us={}",
+            log::info("[Dynamic Assist diagnostic] input={} mode={} window={} result={} delay={} attempts={} issue={} object_id={} object_type={} tick_dt={} elapsed_us={} horizon={} budget_ms={}",
                 down ? "press" : "release", static_cast<int>(context.vehicle), window, decisionName(decision.reason),
                 static_cast<unsigned>(decision.delay), decision.attempts, issueName(state.issue),
-                state.issueObjectID, state.issueObjectType, state.tickDt, elapsed);
+                state.issueObjectID, state.issueObjectType, state.tickDt, elapsed, horizon, budget);
         }
         switch (decision.reason) {
             case dynamic::DecisionReason::safeNow:
@@ -793,8 +786,8 @@ class $modify(DynamicPlayLayer, PlayLayer) {
             dynamic::stopPredictionNode<CCNode>(entry.object.data());
         state.ghost = nullptr;
         state.holder = nullptr;
-        state.ghostVehicle = dynamic::Vehicle::unknown;
         state.checkpoint = nullptr;
+        state.activeCopies.clear();
         state.copies.clear();
         state.scratchObjects.clear();
         state.activatedPortals.clear();

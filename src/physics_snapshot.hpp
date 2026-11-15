@@ -31,6 +31,10 @@ void copyGroundAndVelocityState(Player& dst, Player const& src) {
     COPY_FIELD(m_stateForceVector); COPY_FIELD(m_affectedByForces);
     COPY_FIELD(m_controlsDisabled); COPY_FIELD(m_inputsLocked);
     COPY_FIELD(m_holdingButtons);
+    // Level/player physics options are not fields of PlayerCheckpoint. A new
+    // PlayerObject has defaults that can differ from the live level's rules.
+    COPY_FIELD(m_enable22Changes); COPY_FIELD(m_enableImpulseFix);
+    COPY_FIELD(m_gv0123);
 #undef COPY_FIELD
 }
 }

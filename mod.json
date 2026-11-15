@@ -3,7 +3,7 @@
   "gd": {
     "win": "2.2081"
   },
-  "version": "v0.4.1",
+  "version": "v0.5.0",
   "id": "dynamicassist.practice",
   "name": "Dynamic Assist",
   "developer": "Dynamic Assist",
@@ -15,7 +15,7 @@
       "description": "Maximum delay for an early input. Set to 0 for unmodified input.",
       "default": 0,
       "min": 0,
-      "max": 16
+      "max": 64
     },
     "diagnostics": {
       "type": "bool",
@@ -29,13 +29,21 @@
       "description": "Maximum time spent searching per input. Higher values can cause frame drops; uncertain predictions pass through unchanged.",
       "default": 12,
       "min": 1,
-      "max": 33
+      "max": 66
     },
     "show-controls": {
       "type": "bool",
       "name": "Show in-level controls",
       "description": "Show the assistance controls and statistics during a level.",
       "default": true
+    },
+    "horizon": {
+      "type": "int",
+      "name": "Prediction lookahead (ticks)",
+      "description": "Steps simulated after each candidate input, from 32 to 256. Longer lookahead costs more CPU and assumes no further clicks. It does not guarantee safety beyond the simulated world.",
+      "default": 32,
+      "min": 32,
+      "max": 256
     }
   }
 }
