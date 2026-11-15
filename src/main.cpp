@@ -241,10 +241,10 @@ void ensureGhost(PlayLayer* layer) {
         return;
     }
     ghost->setUserObject("dynamicassist.practice/private-copies", copyOwners);
-    holder->addChild(ghost);
     ghost->m_playEffects = false;
     ghost->m_ghostType = GhostType::Disabled;
     ghost->setVisible(false);
+    holder->addChild(ghost);
     dynamic::stopPredictionNode<CCNode>(holder);
     state.holder = holder;
     state.ghost = ghost;

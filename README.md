@@ -34,7 +34,13 @@ Se registra también el tick real del segundo jugador. La asistencia dual exige 
 
 <!-- /coderabbit-ai-generated:v1 -->
 
-- La búsqueda termina si el jugador muere antes de recibir el clic candidato: esperar todavía más comparte la misma trayectoria hasta esa muerte. También se evita repetir la trayectoria de un jugador cuyo botón no cambia en dual con controles separados. Se conservan el primer retraso seguro y la prioridad de incertidumbre/presupuesto agotado.
+- La búsqueda termina si el jugador muere antes de recibir el clic candidato: esperar todavía más comparte la misma trayectoria hasta esa muerte. <!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:474eb8bf787f98d249d36ac3abe27edf4e437f08a8335d0e183483f227330f6d -->
+
+En dual, esta optimización se limita igualmente a los pasos anteriores al clic previsto. 
+
+<!-- /coderabbit-ai-generated:v1 -->Se conservan el primer retraso seguro y la prioridad de incertidumbre/presupuesto agotado.
 - El diagnóstico muestra `skipped_candidates`, el número de candidatos omitidos por esa comprobación. Una prueba sintética reduce 65 candidatos a 5; no representa una medición de FPS dentro del juego.
 - Las copias de objetos quedan retenidas por el jugador oculto hasta su destrucción, además de la caché, para mantener válidas las referencias nativas a contactos y dash durante la limpieza.
 - El marcado de efectos privados permanece activo durante `addChild/onEnter` y se restaura con un guard incluso al fallar la creación.
