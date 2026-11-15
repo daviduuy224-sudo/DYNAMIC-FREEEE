@@ -420,9 +420,10 @@ dynamic::Verdict simulate(PlayLayer* layer, PlayerObject* player, PlayerCheckpoi
         }
         if (state.uncertain) return dynamic::Verdict::unknown;
         if (state.simDead) {
-            // Later candidates share this prefix. In separate-controls dual,
-            // the other player's input never changes at all.
-            return (!applyInput || i < delay) ? dynamic::Verdict::unavoidable : dynamic::Verdict::unsafe;
+            // Before the target's input, both players share the unchanged
+            // prefix with every later candidate. After that point preserve
+            // full candidate evaluation, including unknown world effects.
+            return i < delay ? dynamic::Verdict::unavoidable : dynamic::Verdict::unsafe;
         }
         return dynamic::Verdict::safe;
     });
