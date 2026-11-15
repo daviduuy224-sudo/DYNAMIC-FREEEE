@@ -2,7 +2,23 @@
 
 # Dynamic Assist (experimental)
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:e1bb89478ea7a66b37aa2d4330478b4d5a60155b72ea0816e5702ff05960e534 -->
+
 Prototipo de asistencia de entrada para Geometry Dash 2.2081 en Windows con Geode 5.11.2. No se ha probado dentro del juego. No se puede garantizar que sea indetectable.
+
+## Cambios de la versión 0.4.1
+
+- Corrección del aislamiento de las estelas: los checkpoints usados para predecir desactivan `GhostType` y los efectos visuales. Los temporizadores de estelas creadas para la predicción se identifican durante toda su vida, incluso después de retirar el jugador oculto. Esto aborda una vía compatible con los dos cierres recibidos en `GhostTrailEffect::trailSnapshot`; falta confirmar el resultado dentro del juego.
+- Se eliminan callbacks y acciones de los nodos privados al terminar cada candidato, también si muere, encuentra una interacción desconocida o agota el tiempo. El jugador real conserva sus efectos.
+- Si cambia la duración del tick de física durante una espera, se entrega inmediatamente la entrada pendiente: ya no se mantiene un retraso calculado con otro reloj.
+- Se omite la construcción del jugador/checkpoint cuando todavía no hay un tick válido. El presupuesto incluye ahora la preparación y la limpieza de la simulación.
+
+Se mantienen las limitaciones de dual, plataforma y simulación futura de triggers indicadas abajo. Esta versión no garantiza completar todos los timings.
+
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 ## Instalación
 
