@@ -20,7 +20,13 @@ Prototipo de asistencia de entrada para Geometry Dash 2.2081 en Windows con Geod
 
 - Predicción limitada de dual de un botón con gravedad independiente (`Unlink Dual Gravity`). Se comprueban los dos jugadores para el mismo retraso. Gravedad enlazada, controles separados de dos jugadores, dash, orbes en contacto y futuras interacciones de portales/orbes en dual siguen sin asistirse. Los candidatos incompletos conservan la entrada original.
 - Los triggers exclusivamente de color 29, 30, 105, 744, 899, 900 y 915 se omiten en la simulación física. Move, Toggle, Spawn y demás triggers no se consideran decorativos; sigue pendiente simular su efecto futuro en el nivel.
-- Al entrar o salir de dual se entrega primero la entrada pendiente. Una entrada del segundo jugador tampoco puede adelantarse a una pendiente. Se conserva el aislamiento de efectos y temporizadores.
+- Al entrar o salir de dual se entrega primero la entrada pendiente. <!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:cb9bd46405d7d2f23d19a7e5164aea76a03b2d1976cd82801a68ff75886e4582 -->
+
+Una entrada del segundo jugador tampoco puede adelantarse a una pendiente. Antes de ejecutar un trigger real mediante `EffectGameObject::triggerObject` también se entrega la entrada pendiente, salvo en los triggers de color conocidos, porque el efecto puede invalidar la trayectoria calculada.
+
+<!-- /coderabbit-ai-generated:v1 --> Se conserva el aislamiento de efectos y temporizadores.
 - Esta ampliación cambia el bloqueo total de dual de las versiones anteriores. No hay prueba dentro de Geometry Dash ni garantía de ausencia de cierres. Las limitaciones generales de dual descritas abajo se reducen únicamente al caso independiente indicado aquí.
 
 ## Cambios de la versión 0.5.0
