@@ -24,7 +24,15 @@ Prototipo de asistencia de entrada para Geometry Dash 2.2081 en Windows con Geod
 
 <!-- coderabbit-ai-generated-section:v1:55d2bf2ee232221451c013b0ba059e1919c2bee7e421341e7e568b799d2fe83d -->
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:49034b9eec9697ca07f4dce717a827fb3064c97b98504c15f4a6783837968703 -->
+
 ## Cambios de la versión 0.5.3
+
+Se registra también el tick real del segundo jugador. La asistencia dual exige relojes compatibles; un cambio del modo de controles invalida una entrada pendiente. El diagnóstico incluye `second_tick_dt`.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 - La búsqueda termina si el jugador muere antes de recibir el clic candidato: esperar todavía más comparte la misma trayectoria hasta esa muerte. También se evita repetir la trayectoria de un jugador cuyo botón no cambia en dual con controles separados. Se conservan el primer retraso seguro y la prioridad de incertidumbre/presupuesto agotado.
 - El diagnóstico muestra `skipped_candidates`, el número de candidatos omitidos por esa comprobación. Una prueba sintética reduce 65 candidatos a 5; no representa una medición de FPS dentro del juego.

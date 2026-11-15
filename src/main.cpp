@@ -106,9 +106,11 @@ struct State {
     std::uint64_t pendingStartStep = 0;
     std::uint8_t pendingDelay = 0;
     float tickDt = 0;
+    float secondTickDt = 0;
     float pendingTickDt = 0;
     bool pendingDual = false;
     bool pendingPlayer1 = true;
+    bool pendingSeparateControls = false;
     dynamic::Vehicle pendingSecondVehicle = dynamic::Vehicle::unknown;
     std::uint64_t tick = 0;
     dynamic::InputQueue pending;
@@ -190,6 +192,7 @@ void resetState(PlayLayer* layer) {
     state.deliveredDown = false;
     state.tick = 0;
     state.tickDt = 0;
+    state.secondTickDt = 0;
     state.completedSteps = 0;
     state.pendingStartStep = 0;
     state.stats = {};
@@ -203,7 +206,8 @@ dynamic::PredictionContext predictionContext(PlayerObject* p, PlayLayer* layer, 
     auto vehicle = dynamic::vehicleFor({p->m_isShip, p->m_isBird, p->m_isBall,
         p->m_isDart, p->m_isRobot, p->m_isSpider, p->m_isSwing});
     auto* second = layer->m_player2;
-    bool independentDual = layer->m_gameState.m_unlinkDualGravity &&
+    bool independentDual = dynamic::compatibleTickDuration(state.tickDt, state.secondTickDt) &&
+        layer->m_gameState.m_unlinkDualGravity &&
         layer->m_levelSettings && second &&
         !p->m_isDashing && !second->m_isDashing && !second->m_isDead &&
         !second->m_controlsDisabled && !second->m_inputsLocked && !second->m_isLocked;
@@ -545,10 +549,10 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
         });
         if (diagnostics) {
             auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - start).count();
-            log::info("[Dynamic Assist diagnostic] input={} player1={} separate_controls={} mode={} window={} result={} delay={} attempts={} issue={} object_id={} object_type={} tick_dt={} elapsed_us={} horizon={} budget_ms={} skipped_candidates={}",
+            log::info("[Dynamic Assist diagnostic] input={} player1={} separate_controls={} mode={} window={} result={} delay={} attempts={} issue={} object_id={} object_type={} tick_dt={} elapsed_us={} horizon={} budget_ms={} skipped_candidates={} second_tick_dt={}",
                 down ? "press" : "release", player1, separateControls, static_cast<int>(context.vehicle), window, decisionName(decision.reason),
                 static_cast<unsigned>(decision.delay), decision.attempts, issueName(state.issue),
-                state.issueObjectID, state.issueObjectType, state.tickDt, elapsed, horizon, budget, decision.skippedCandidates);
+                state.issueObjectID, state.issueObjectType, state.tickDt, elapsed, horizon, budget, decision.skippedCandidates, state.secondTickDt);
         }
         switch (decision.reason) {
             case dynamic::DecisionReason::safeNow:
@@ -580,6 +584,7 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             state.pendingTickDt = state.tickDt;
             state.pendingDual = context.dual;
             state.pendingPlayer1 = player1;
+            state.pendingSeparateControls = separateControls;
             state.pendingSecondVehicle = context.dual
                 ? predictionContext(otherPlayer, layer, true).vehicle : dynamic::Vehicle::unknown;
             log::info("Dynamic Assist: planned delay {} tick(s)", static_cast<unsigned>(decision.delay));
@@ -718,6 +723,8 @@ class $modify(DynamicPlayer, PlayerObject) {
     }
     void update(float dt) {
         auto* layer = PlayLayer::get();
+        if (!state.simulating && layer && layer == state.layer && this == layer->m_player2)
+            state.secondTickDt = dynamic::validTickDuration(dt) ? dt : 0.f;
         if (!state.simulating && layer && layer == state.layer && this == layer->m_player1) {
             ++state.tick;
             state.tickDt = dynamic::validTickDuration(dt) ? dt : 0.f;
@@ -748,6 +755,8 @@ class $modify(DynamicPlayer, PlayerObject) {
             if (!state.pending.empty() &&
                 (!dynamic::compatibleTickDuration(state.pendingTickDt, state.tickDt) ||
                  context.dual != state.pendingDual ||
+                 (context.dual && layer->m_levelSettings &&
+                  layer->m_levelSettings->m_twoPlayerMode != state.pendingSeparateControls) ||
                  (context.dual && predictionContext(pendingOther, layer, true).vehicle != state.pendingSecondVehicle) ||
                  dynamic::pendingInvalidated(context, state.pendingVehicle) ||
                  dynamic::pendingExceedsWindow(state.pendingDelay, window)))
