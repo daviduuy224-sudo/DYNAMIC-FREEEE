@@ -38,7 +38,13 @@ Se registra también el tick real del segundo jugador. La asistencia dual exige 
 
 <!-- coderabbit-ai-generated-section:v1:474eb8bf787f98d249d36ac3abe27edf4e437f08a8335d0e183483f227330f6d -->
 
-En dual, esta optimización se limita igualmente a los pasos anteriores al clic previsto. 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:bca3d41d9ee8dfe3fda629678b4b4e0e0577d8f5c60fdfbd9efc9b95faabb992 -->
+
+En dual, esta optimización se limita igualmente a los pasos anteriores al clic previsto.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 <!-- /coderabbit-ai-generated:v1 -->Se conservan el primer retraso seguro y la prioridad de incertidumbre/presupuesto agotado.
 - El diagnóstico muestra `skipped_candidates`, el número de candidatos omitidos por esa comprobación. Una prueba sintética reduce 65 candidatos a 5; no representa una medición de FPS dentro del juego.
