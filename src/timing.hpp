@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -14,6 +15,13 @@ enum class DecisionReason { disabled, safeNow, unknownInitial, delayed, unknownC
 // Invalid physics steps cannot be used as a prediction clock.
 inline bool validTickDuration(float dt) {
     return std::isfinite(dt) && dt > 0.f && dt < 2.f;
+}
+
+// A queued delay is valid only for the physics clock used to predict it.
+// Allow float rounding, but flush when the game's substep actually changes.
+inline bool compatibleTickDuration(float predicted, float current) {
+    return validTickDuration(predicted) && validTickDuration(current) &&
+        std::abs(predicted - current) <= std::max(predicted, current) * 1e-5f;
 }
 
 // Check both sides of each step: an individual update or collision check can

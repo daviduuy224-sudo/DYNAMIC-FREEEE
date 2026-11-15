@@ -8,6 +8,7 @@
 #include <Geode/modify/GameObject.hpp>
 #include <Geode/modify/EffectGameObject.hpp>
 #include <Geode/modify/RingObject.hpp>
+#include <Geode/modify/GhostTrailEffect.hpp>
 #include <Windows.h>
 #include <algorithm>
 #include <chrono>
@@ -24,6 +25,7 @@
 #include "input_queue.hpp"
 #include "mode_policy.hpp"
 #include "physics_snapshot.hpp"
+#include "simulation_safety.hpp"
 
 using namespace geode::prelude;
 namespace {
@@ -82,6 +84,7 @@ struct State {
     std::uint64_t generation = 0;
     Ref<PlayerCheckpoint> checkpoint;
     bool simulating = false;
+    bool creatingGhost = false;
     bool simDead = false;
     bool uncertain = false;
     SimulationIssue issue = SimulationIssue::none;
@@ -102,6 +105,7 @@ struct State {
     std::uint64_t pendingStartStep = 0;
     std::uint8_t pendingDelay = 0;
     float tickDt = 0;
+    float pendingTickDt = 0;
     std::uint64_t tick = 0;
     dynamic::InputQueue pending;
     dynamic::Vehicle pendingVehicle = dynamic::Vehicle::unknown;
@@ -151,6 +155,7 @@ void discardPending(char const* reason) {
     }
     state.pending.clear();
     state.pendingDelay = 0;
+    state.pendingTickDt = 0;
     state.pendingVehicle = dynamic::Vehicle::unknown;
 }
 void flush(PlayLayer* layer) {
@@ -159,6 +164,7 @@ void flush(PlayLayer* layer) {
         forwardQueued(layer, *event, "flush");
     }
     state.pendingDelay = 0;
+    state.pendingTickDt = 0;
     state.pendingVehicle = dynamic::Vehicle::unknown;
 }
 void setWindow(PlayLayer* layer, std::int64_t value) {
@@ -198,13 +204,6 @@ dynamic::PredictionContext predictionContext(PlayerObject* p, PlayLayer* layer, 
         p->m_isOnSlope || p->m_wasOnSlope,
         dynamic::hasActiveForce(p->m_stateForce, p->m_affectedByForces)};
 }
-void pauseTree(CCNode* node) {
-    node->pauseSchedulerAndActions();
-    auto* children = node->getChildren();
-    if (!children) return;
-    for (unsigned i = 0; i < children->count(); ++i)
-        pauseTree(static_cast<CCNode*>(children->objectAtIndex(i)));
-}
 void ensureGhost(PlayLayer* layer, dynamic::Vehicle vehicle) {
     if (!layer || !layer->m_objectLayer) return;
     if (state.ghost && state.ghostVehicle == vehicle) return;
@@ -213,20 +212,26 @@ void ensureGhost(PlayLayer* layer, dynamic::Vehicle vehicle) {
         state.ghost = nullptr;
         state.holder = nullptr;
         state.ghostVehicle = dynamic::Vehicle::unknown;
+        dynamic::stopPredictionNode<CCNode>(oldHolder);
         oldHolder->removeFromParent();
     }
     auto* holder = CCLayer::create();
     if (!holder) return;
     holder->setVisible(false);
     layer->m_objectLayer->addChild(holder);
+    // Native construction can create effects before state.ghost is assigned.
+    state.creatingGhost = true;
     auto* ghost = PlayerObject::create(1, 1, layer, holder, true);
+    state.creatingGhost = false;
     if (!ghost) {
         holder->removeFromParent();
         return;
     }
     holder->addChild(ghost);
+    ghost->m_playEffects = false;
+    ghost->m_ghostType = GhostType::Disabled;
     ghost->setVisible(false);
-    pauseTree(holder);
+    dynamic::stopPredictionNode<CCNode>(holder);
     state.holder = holder;
     state.ghost = ghost;
     state.ghostVehicle = vehicle;
@@ -241,6 +246,7 @@ GameObject* interactionCopy(GameObject* original) {
     if (!copy) return nullptr;
     state.scratchObjects.insert(copy);
     if (entry.generation == state.generation) return copy;
+    dynamic::stopPredictionNode<CCNode>(copy);
     copy->resetObject();
     copy->setPosition(original->getPosition());
     copy->setScaleX(original->getScaleX());
@@ -313,7 +319,6 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
     if (!ghost || !player) { state.issue = SimulationIssue::missingPlayer; return dynamic::Verdict::unknown; }
     if (state.tickDt <= 0) { state.issue = SimulationIssue::noTick; return dynamic::Verdict::unknown; }
     if (Clock::now() >= deadline) { state.issue = SimulationIssue::deadline; return dynamic::Verdict::unknown; }
-    state.simulating = true;
     dynamic::ScopedRestore gameContext(layer->m_gameState,
         &GJGameState::m_lastActivatedPortal1, &GJGameState::m_lastActivatedPortal2,
         &GJGameState::m_portalY, &GJGameState::m_gravityRelated,
@@ -324,9 +329,15 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
         &GJGameState::m_lastModeHeight, &GJGameState::m_cameraPosition,
         &GJGameState::m_cameraLastPosition, &GJGameState::m_cameraOffset,
         &GJGameState::m_activatedObjectIDs, &GJGameState::m_stateObjects);
-    struct SimulationGuard {
-        ~SimulationGuard() { state.simulating = false; }
-    } simulationGuard;
+    // Native restores/mode changes may schedule visual work after the call
+    // returns. Stop it on every exit, while the simulation flag is still set.
+    dynamic::PredictionScope simulationGuard(state.simulating, [] {
+        dynamic::stopPredictionNode<CCNode>(state.holder);
+        for (auto const& [original, entry] : state.copies) {
+            if (entry.generation == state.generation)
+                dynamic::stopPredictionNode<CCNode>(entry.object.data());
+        }
+    });
     state.simDead = false;
     state.uncertain = false;
     ++state.generation;
@@ -335,6 +346,7 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
     // velocities, slope data, held input and ring bookkeeping. The old partial
     // copy left state from the previous candidate on the hidden player.
     if (!state.checkpoint) { state.issue = SimulationIssue::missingPlayer; return dynamic::Verdict::unknown; }
+    dynamic::preparePredictionCheckpoint(*state.checkpoint.data());
     ghost->loadFromCheckpoint(state.checkpoint.data());
     dynamic::copyGroundAndVelocityState(*ghost, *player);
     if (player->m_isDashing && player->m_dashRing) {
@@ -353,7 +365,8 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
     // with private objects before applying the first candidate input.
     if (player->m_touchingRings) {
         for (unsigned i = 0; i < player->m_touchingRings->count(); ++i) {
-            auto* ring = static_cast<RingObject*>(player->m_touchingRings->objectAtIndex(i));
+            auto* ring = typeinfo_cast<RingObject*>(player->m_touchingRings->objectAtIndex(i));
+            if (!ring) { state.issue = SimulationIssue::ring; return dynamic::Verdict::unknown; }
             if (!dynamic::nativeOrbOrPad(ring->m_objectType) || ring->m_targetGroupID != 0) {
                 state.issueObjectID = ring->m_objectID;
                 state.issueObjectType = static_cast<int>(ring->m_objectType);
@@ -365,7 +378,7 @@ dynamic::Verdict simulate(PlayLayer* layer, bool down, unsigned delay,
             ghost->m_touchingRings->addObject(copy);
         }
     }
-    pauseTree(state.holder);
+    dynamic::stopPredictionNode<CCNode>(state.holder);
 
     constexpr unsigned horizon = 32;
     auto expired = [&] {
@@ -421,6 +434,18 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             state.deliveredDown = down;
             return GJBaseGameLayer::handleButton(down, buttonId, player1);
         }
+        // A fresh attempt has no trustworthy clock yet. Avoid constructing a
+        // player/checkpoint for an input that must be passed through anyway.
+        if (!dynamic::validTickDuration(state.tickDt)) {
+            if (diagnostics) log::info("[Dynamic Assist diagnostic] input ignored: no-physics-tick");
+            flush(layer);
+            showResult("Esperando primer tick de fisica");
+            state.deliveredDown = down;
+            return GJBaseGameLayer::handleButton(down, buttonId, player1);
+        }
+        auto start = Clock::now();
+        auto budget = std::clamp<int64_t>(Mod::get()->getSettingValue<int64_t>("budget"), 1, 33);
+        auto deadline = start + std::chrono::milliseconds(budget);
         ensureGhost(layer, context.vehicle);
         if (!state.ghost) {
             if (diagnostics) log::info("[Dynamic Assist diagnostic] input ignored: ghost-unavailable");
@@ -445,13 +470,15 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             return GJBaseGameLayer::handleButton(down, buttonId, player1);
         }
         player->saveToCheckpoint(state.checkpoint.data());
-        state.checkpoint->m_playEffects = false;
-        state.checkpoint->m_isHidden = true;
-        auto start = Clock::now();
-        auto budget = std::clamp<int64_t>(Mod::get()->getSettingValue<int64_t>("budget"), 1, 33);
-        auto deadline = start + std::chrono::milliseconds(budget);
+        dynamic::preparePredictionCheckpoint(*state.checkpoint.data());
         auto decision = dynamic::chooseDelay(static_cast<std::uint8_t>(window), [&](std::uint8_t delay) {
-            return simulate(layer, down, delay, deadline);
+            auto verdict = simulate(layer, down, delay, deadline);
+            // Include native setup and scoped cleanup in the same deadline.
+            if (Clock::now() >= deadline) {
+                state.issue = SimulationIssue::deadline;
+                return dynamic::Verdict::unknown;
+            }
+            return verdict;
         });
         if (diagnostics) {
             auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - start).count();
@@ -487,6 +514,7 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
             state.pendingDelay = decision.delay;
             state.pending.addAfterSteps(down, state.tick, decision.delay);
             state.pendingVehicle = context.vehicle;
+            state.pendingTickDt = state.tickDt;
             log::info("Dynamic Assist: planned delay {} tick(s)", static_cast<unsigned>(decision.delay));
             return;
         }
@@ -604,6 +632,15 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
 };
 
 class $modify(DynamicPlayer, PlayerObject) {
+    void toggleGhostEffect(GhostType type) {
+        if (state.creatingGhost || this == state.ghost) {
+            // Checkpoint restore calls this native method. A visual trail is
+            // never needed for the hidden physics player.
+            this->m_ghostType = GhostType::Disabled;
+            return;
+        }
+        PlayerObject::toggleGhostEffect(type);
+    }
     void update(float dt) {
         auto* layer = PlayLayer::get();
         if (!state.simulating && layer && layer == state.layer && this == layer->m_player1) {
@@ -632,12 +669,14 @@ class $modify(DynamicPlayer, PlayerObject) {
             auto window = dynamic::clampWindow(Mod::get()->getSettingValue<int64_t>("window"));
             auto context = predictionContext(this, layer, window > 0);
             if (!state.pending.empty() &&
-                (state.tickDt == 0.f || dynamic::pendingInvalidated(context, state.pendingVehicle) ||
+                (!dynamic::compatibleTickDuration(state.pendingTickDt, state.tickDt) ||
+                 dynamic::pendingInvalidated(context, state.pendingVehicle) ||
                  dynamic::pendingExceedsWindow(state.pendingDelay, window)))
                 flush(layer);
             while (auto event = state.pending.pop(state.tick)) forwardQueued(layer, *event, "scheduled");
             if (state.pending.empty()) {
                 state.pendingDelay = 0;
+                state.pendingTickDt = 0;
                 state.pendingVehicle = dynamic::Vehicle::unknown;
             }
         }
@@ -659,6 +698,26 @@ class $modify(DynamicPlayer, PlayerObject) {
     }
     void playSpiderDashEffect(CCPoint from, CCPoint to) {
         if (!state.simulating) PlayerObject::playSpiderDashEffect(from, to);
+    }
+};
+class $modify(DynamicGhostTrail, GhostTrailEffect) {
+    struct Fields { bool predictionOwned = false; };
+
+    bool init() {
+        bool predictionOwned = state.creatingGhost || state.simulating;
+        if (!GhostTrailEffect::init()) return false;
+        m_fields->predictionOwned = predictionOwned;
+        return true;
+    }
+    void trailSnapshot(float dt) {
+        // Timers execute after state.simulating has returned to false. Keep
+        // ownership on the effect itself, including after a ghost is retired.
+        if (m_fields->predictionOwned) {
+            this->unscheduleAllSelectors();
+            this->stopAllActions();
+            return;
+        }
+        GhostTrailEffect::trailSnapshot(dt);
     }
 };
 class $modify(DynamicRing, RingObject) {
@@ -729,6 +788,9 @@ class $modify(DynamicPlayLayer, PlayLayer) {
         state.layer = nullptr;
         state.controls = nullptr;
         state.status = nullptr;
+        dynamic::stopPredictionNode<CCNode>(state.holder);
+        for (auto const& [original, entry] : state.copies)
+            dynamic::stopPredictionNode<CCNode>(entry.object.data());
         state.ghost = nullptr;
         state.holder = nullptr;
         state.ghostVehicle = dynamic::Vehicle::unknown;

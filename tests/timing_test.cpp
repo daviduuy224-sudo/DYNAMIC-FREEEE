@@ -15,6 +15,14 @@ int main() {
     assert(!validTickDuration(0.f) && !validTickDuration(-1.f));
     assert(!validTickDuration(2.f) && !validTickDuration(std::numeric_limits<float>::infinity()));
     assert(!validTickDuration(std::numeric_limits<float>::quiet_NaN()));
+    using dynamic::compatibleTickDuration;
+    assert(compatibleTickDuration(.25f, .25f));
+    assert(compatibleTickDuration(.25f, std::nextafter(.25f, 1.f)));
+    assert(!compatibleTickDuration(.25f, .125f));
+    assert(!compatibleTickDuration(.125f, .25f));
+    assert(!compatibleTickDuration(0.f, .25f));
+    assert(!compatibleTickDuration(.25f, 0.f));
+    assert(!compatibleTickDuration(.25f, std::numeric_limits<float>::quiet_NaN()));
 
     unsigned checks = 0, simulated = 0;
     auto deadline = [&] { return ++checks >= 4; }; // expires during step 2
