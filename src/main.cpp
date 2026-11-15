@@ -222,13 +222,21 @@ void ensureGhost(PlayLayer* layer) {
     holder->setVisible(false);
     layer->m_objectLayer->addChild(holder);
     // Native construction can create effects before state.ghost is assigned.
+    // Keep ownership tagging active through addChild/onEnter as well as the
+    // native constructor. Restore the flag on every exit, including failure.
+    dynamic::ScopedRestore creating(state, &State::creatingGhost);
     state.creatingGhost = true;
     auto* ghost = PlayerObject::create(1, 1, layer, holder, true);
-    state.creatingGhost = false;
     if (!ghost) {
         holder->removeFromParent();
         return;
     }
+    auto* copyOwners = CCArray::create();
+    if (!copyOwners) {
+        holder->removeFromParent();
+        return;
+    }
+    ghost->setUserObject("dynamicassist.practice/private-copies", copyOwners);
     holder->addChild(ghost);
     ghost->m_playEffects = false;
     ghost->m_ghostType = GhostType::Disabled;
@@ -242,7 +250,15 @@ void ensureGhost(PlayLayer* layer) {
 // reach a real level object. Copies are reset once for each candidate.
 GameObject* interactionCopy(GameObject* original) {
     auto& entry = state.copies[original];
-    if (!entry.object) entry.object = GameObject::createWithKey(original->m_objectID);
+    if (!entry.object) {
+        auto* owners = state.ghost ? static_cast<CCArray*>(
+            state.ghost->getUserObject("dynamicassist.practice/private-copies")) : nullptr;
+        if (!owners) return nullptr;
+        entry.object = GameObject::createWithKey(original->m_objectID);
+        // Native PlayerObject has raw contact/dash pointers. Keep the targets
+        // alive until its destructor finishes, even after the cache is cleared.
+        if (entry.object) owners->addObject(entry.object.data());
+    }
     auto* copy = entry.object.data();
     if (!copy) return nullptr;
     state.scratchObjects.insert(copy);
@@ -398,8 +414,13 @@ dynamic::Verdict simulate(PlayLayer* layer, PlayerObject* player, PlayerCheckpoi
         if (!state.simDead && !state.uncertain) {
             layer->checkCollisions(ghost, state.tickDt, false);
         }
-        return state.uncertain ? dynamic::Verdict::unknown :
-            state.simDead ? dynamic::Verdict::unsafe : dynamic::Verdict::safe;
+        if (state.uncertain) return dynamic::Verdict::unknown;
+        if (state.simDead) {
+            // Later candidates share this prefix. In separate-controls dual,
+            // the other player's input never changes at all.
+            return (!applyInput || i < delay) ? dynamic::Verdict::unavoidable : dynamic::Verdict::unsafe;
+        }
+        return dynamic::Verdict::safe;
     });
 }
 } // namespace
@@ -524,10 +545,10 @@ class $modify(DynamicGameLayer, GJBaseGameLayer) {
         });
         if (diagnostics) {
             auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - start).count();
-            log::info("[Dynamic Assist diagnostic] input={} player1={} separate_controls={} mode={} window={} result={} delay={} attempts={} issue={} object_id={} object_type={} tick_dt={} elapsed_us={} horizon={} budget_ms={}",
+            log::info("[Dynamic Assist diagnostic] input={} player1={} separate_controls={} mode={} window={} result={} delay={} attempts={} issue={} object_id={} object_type={} tick_dt={} elapsed_us={} horizon={} budget_ms={} skipped_candidates={}",
                 down ? "press" : "release", player1, separateControls, static_cast<int>(context.vehicle), window, decisionName(decision.reason),
                 static_cast<unsigned>(decision.delay), decision.attempts, issueName(state.issue),
-                state.issueObjectID, state.issueObjectType, state.tickDt, elapsed, horizon, budget);
+                state.issueObjectID, state.issueObjectType, state.tickDt, elapsed, horizon, budget, decision.skippedCandidates);
         }
         switch (decision.reason) {
             case dynamic::DecisionReason::safeNow:

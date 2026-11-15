@@ -9,7 +9,9 @@ namespace dynamic {
 
 // The simulator must distinguish an unsafe trajectory from one it cannot
 // predict (for example, a portal or an exhausted time budget).
-enum class Verdict { safe, unsafe, unknown };
+// unavoidable means a death in the unchanged-input prefix: every larger
+// delay shares that same prefix. It is a proof for pruning, never uncertainty.
+enum class Verdict { safe, unsafe, unknown, unavoidable };
 enum class DecisionReason { disabled, safeNow, unknownInitial, delayed, unknownCandidate, noSafeTick };
 
 // Invalid physics steps cannot be used as a prediction clock.
@@ -42,6 +44,7 @@ struct Decision {
     bool predictionComplete = false;
     DecisionReason reason = DecisionReason::disabled;
     unsigned attempts = 0;
+    unsigned skippedCandidates = 0;
 };
 
 // Only an early input can be delayed: this function cannot move an input into
@@ -52,11 +55,14 @@ inline Decision chooseDelay(std::uint8_t maxDelay,
 
     auto initial = simulate(0);
     if (initial == Verdict::unknown) return {0, false, DecisionReason::unknownInitial, 1};
+    if (initial == Verdict::unavoidable) return {0, true, DecisionReason::noSafeTick, 1, maxDelay};
     if (initial == Verdict::safe) return {0, true, DecisionReason::safeNow, 1};
 
     for (unsigned tick = 1; tick <= maxDelay; ++tick) {
         auto verdict = simulate(static_cast<std::uint8_t>(tick));
         if (verdict == Verdict::unknown) return {0, false, DecisionReason::unknownCandidate, tick + 1};
+        if (verdict == Verdict::unavoidable)
+            return {0, true, DecisionReason::noSafeTick, tick + 1, static_cast<unsigned>(maxDelay) - tick};
         if (verdict == Verdict::safe) return {static_cast<std::uint8_t>(tick), true, DecisionReason::delayed, tick + 1};
     }
     return {0, true, DecisionReason::noSafeTick, static_cast<unsigned>(maxDelay) + 1};

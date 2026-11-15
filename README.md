@@ -20,7 +20,22 @@ Prototipo de asistencia de entrada para Geometry Dash 2.2081 en Windows con Geod
 
 <!-- coderabbit-ai-generated-section:v1:3da4ec642a79be7aaa438ef98590eae0f978bd00b64bb4f1ab15904d7b104516 -->
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:55d2bf2ee232221451c013b0ba059e1919c2bee7e421341e7e568b799d2fe83d -->
+
+## Cambios de la versión 0.5.3
+
+- La búsqueda termina si el jugador muere antes de recibir el clic candidato: esperar todavía más comparte la misma trayectoria hasta esa muerte. También se evita repetir la trayectoria de un jugador cuyo botón no cambia en dual con controles separados. Se conservan el primer retraso seguro y la prioridad de incertidumbre/presupuesto agotado.
+- El diagnóstico muestra `skipped_candidates`, el número de candidatos omitidos por esa comprobación. Una prueba sintética reduce 65 candidatos a 5; no representa una medición de FPS dentro del juego.
+- Las copias de objetos quedan retenidas por el jugador oculto hasta su destrucción, además de la caché, para mantener válidas las referencias nativas a contactos y dash durante la limpieza.
+- El marcado de efectos privados permanece activo durante `addChild/onEnter` y se restaura con un guard incluso al fallar la creación.
+
+Se mantienen los límites de la versión anterior: no hay simulación conjunta de gravedad enlazada ni mundo futuro completo para Move/Toggle/Spawn. Falta confirmar rendimiento y estabilidad dentro de Geometry Dash.
+
 ## Cambios de la versión 0.5.2
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 Se amplía el dual con gravedad independiente a controles separados: cada entrada y su retraso conservan el jugador destinatario. El otro jugador se simula manteniendo sus botones actuales, sin recibir el clic ajeno. Una nueva entrada de cualquiera de los dos entrega primero la pendiente para conservar el orden. El diagnóstico incluye el jugador y el modo de controles. Falta verificarlo dentro del juego.
 
