@@ -784,8 +784,14 @@ class $modify(DynamicObject, GameObject) {
 };
 class $modify(DynamicEffect, EffectGameObject) {
     void triggerObject(GJBaseGameLayer* layer, int id, gd::vector<int> const* keys) {
-        if (!state.simulating) EffectGameObject::triggerObject(layer, id, keys);
-        else if (!state.scratchObjects.contains(this) || this->m_targetGroupID != 0) {
+        if (!state.simulating) {
+            // A real world-changing trigger invalidates a queued trajectory.
+            // Deliver before running the effect so input order is preserved.
+            if (state.layer && static_cast<GJBaseGameLayer*>(state.layer) == layer &&
+                !dynamic::colorOnlyTrigger(this->m_objectID) && !state.pending.empty())
+                flush(state.layer);
+            EffectGameObject::triggerObject(layer, id, keys);
+        } else if (!state.scratchObjects.contains(this) || this->m_targetGroupID != 0) {
             // A custom group effect needs future world simulation as well.
             state.uncertain = true;
             state.issue = SimulationIssue::activation;
